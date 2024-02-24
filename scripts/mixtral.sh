@@ -27,19 +27,26 @@ echo "Node: $head_node"
 echo "Node IP: $head_node_ip"
 echo "Node list: $SLURM_JOB_NODELIS"
 
+#######################################
+model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/ckpt_test
+
 srun torchrun \
   --nnodes ${num_nodes} \
   --nproc_per_node ${num_gpu_per_node} \
   --node_rank $SLURM_NODEID \
+  --rdzv_id $RANDOM \
+  --rdzv_backend c10d \
+  --rdzv_endpoint $head_node:29518 \
   src/train_bash.py \
+  --deepspeed "config/mixtral_deepspeed.json" \
   --stage pt \
   --do_eval \
-  --model_name_or_path path_to_llama_model \
+  --model_name_or_path ${model_name_or_path} \
   --dataset lima \
   --finetuning_type full \
-  --output_dir path_to_pt_checkpoint \
-  --overwrite_cache \
+  --output_dir ${output_dir} \
   --per_device_train_batch_size 4 \
   --logging_steps 10 \
   --plot_loss \
-  --fp16
+  --bf16
