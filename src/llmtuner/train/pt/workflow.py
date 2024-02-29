@@ -10,7 +10,6 @@ from ...extras.ploting import plot_loss
 from ...model import load_model_and_tokenizer
 from ...train.utils import create_modelcard_and_push
 
-
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
 
@@ -18,13 +17,15 @@ if TYPE_CHECKING:
 
 
 def run_pt(
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    finetuning_args: "FinetuningArguments",
-    callbacks: Optional[List["TrainerCallback"]] = None,
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        finetuning_args: "FinetuningArguments",
+        callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
+    # for name, param in model.named_parameters():
+    #     print(f"{name}: {param.size()}")
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage="pt")
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 

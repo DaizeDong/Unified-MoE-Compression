@@ -4,27 +4,24 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.integrations import is_deepspeed_zero3_enabled
 from trl import AutoModelForCausalLMWithValueHead
 
-from ..extras.logging import get_logger
-from ..extras.misc import count_parameters, get_current_device, try_download_model_from_ms
 from .adapter import init_adapter
 from .patcher import patch_config, patch_model, patch_tokenizer, patch_valuehead_model
 from .utils import load_valuehead_params, register_autoclass
-
+from ..extras.logging import get_logger
+from ..extras.misc import count_parameters, get_current_device, try_download_model_from_ms
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
-
     from ..hparams import FinetuningArguments, ModelArguments
-
 
 logger = get_logger(__name__)
 
 
 def load_model_and_tokenizer(
-    model_args: "ModelArguments",
-    finetuning_args: "FinetuningArguments",
-    is_trainable: Optional[bool] = False,
-    add_valuehead: Optional[bool] = False,
+        model_args: "ModelArguments",
+        finetuning_args: "FinetuningArguments",
+        is_trainable: Optional[bool] = False,
+        add_valuehead: Optional[bool] = False,
 ) -> Tuple["PreTrainedModel", "PreTrainedTokenizer"]:
     r"""
     Loads pretrained model and tokenizer.
@@ -39,6 +36,7 @@ def load_model_and_tokenizer(
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
         "token": model_args.hf_hub_token,
+        "attn_implementation": "flash_attention_2",  # 🔍
     }
 
     tokenizer = AutoTokenizer.from_pretrained(

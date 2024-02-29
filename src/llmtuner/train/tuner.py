@@ -11,7 +11,7 @@ from .rm import run_rm
 from .sft import run_sft
 from ..extras.callbacks import LogCallback
 from ..extras.logging import get_logger
-from ..hparams import get_infer_args, get_train_args
+from ..hparams import get_infer_args, get_train_args, get_train_sparse_args
 from ..model import load_model_and_tokenizer
 
 if TYPE_CHECKING:
@@ -21,7 +21,8 @@ logger = get_logger(__name__)
 
 
 def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["TrainerCallback"]] = None):
-    model_args, data_args, training_args, finetuning_args, generating_args = get_train_args(args)
+    # model_args, data_args, training_args, finetuning_args, generating_args = get_train_args(args)
+    model_args, data_args, training_args, finetuning_args, generating_args, pruning_args = get_train_sparse_args(args)
     callbacks = [LogCallback()] if callbacks is None else callbacks
 
     if finetuning_args.stage == "pt":
@@ -35,7 +36,7 @@ def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["Tra
     elif finetuning_args.stage == "dpo":
         run_dpo(model_args, data_args, training_args, finetuning_args, callbacks)
     elif finetuning_args.stage == "prune":  # 🔍
-        run_prune(model_args, data_args, training_args, finetuning_args, args, callbacks)
+        run_prune(model_args, data_args, training_args, finetuning_args, pruning_args, callbacks)
     else:
         raise ValueError("Unknown task.")
 

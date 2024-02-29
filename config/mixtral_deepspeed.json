@@ -5,7 +5,7 @@
   "gradient_clipping": "auto",
   "zero3_init_flag": false,
   "bf16": {
-    "enabled": true
+    "enabled": "auto"
   },
   "zero_optimization": {
     "stage": 3,

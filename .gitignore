@@ -163,3 +163,7 @@ cython_debug/
 user.config
 saves/
 cache/
+/results_test_pt/
+/logs_test_pt/
+/logs_test_prune/
+/logs_prune/
