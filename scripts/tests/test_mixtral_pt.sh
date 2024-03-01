@@ -1,20 +1,20 @@
 #!/usr/bin/bash
 
 #SBATCH --job-name=ttt
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_test_pt/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_test_pt/%x-%j.log
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_pt/test/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_pt/test/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=0
 
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --gres=gpu:8
-#SBATCH --quotatype=reserved
-# reserved spot
+#SBATCH --quotatype=auto
+# reserved spot auto
 
-num_nodes=2        # should match with --nodes
+num_nodes=1        # should match with --nodes
 num_gpu_per_node=8 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
@@ -63,7 +63,7 @@ echo "Total GPUs: $num_processes"
 
 #######################################
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/ckpt_test_pt
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/test
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
@@ -74,6 +74,18 @@ cd /mnt/petrelfs/dongdaize.d/workspace/compression
 #  --num_machines ${num_nodes} \
 #  --main_process_ip ${head_node_ip} \
 #  --main_process_port ${port} \
+#  src/train_bash.py \
+#  --stage pt \
+#  --do_eval \
+#  --model_name_or_path ${model_name_or_path} \
+#  --print_param_status \
+#  --dataset lima \
+#  --finetuning_type full \
+#  --output_dir ${output_dir} \
+#  --per_device_train_batch_size 4 \
+#  --logging_steps 10 \
+#  --plot_loss \
+#  --bf16
 
 srun torchrun \
   --nnodes ${num_nodes} \
@@ -83,7 +95,7 @@ srun torchrun \
   --rdzv_backend c10d \
   --rdzv_endpoint ${head_node}:${port} \
   src/train_bash.py \
-  --deepspeed "config/mixtral_deepspeed.json" \
+  --deepspeed "config/deepspeed/mixtral_deepspeed.json" \
   --stage pt \
   --do_eval \
   --model_name_or_path ${model_name_or_path} \

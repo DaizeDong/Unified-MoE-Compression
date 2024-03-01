@@ -6,3 +6,9 @@ def print_gpu_memory(accelerator):
         for i in range(cuda.device_count()):
             used_memory = cuda.memory_allocated(0) // 1024 ** 2
             print(f"GPU {i} Used Memory: {used_memory}MB")
+
+
+def print_gpu_memory_device():
+    device = cuda.current_device()
+    used_memory = cuda.memory_allocated(device) // 1024 ** 2
+    print(f"GPU {device} Used Memory: {used_memory}MB")

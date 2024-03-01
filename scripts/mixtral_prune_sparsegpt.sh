@@ -6,12 +6,12 @@
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=64
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
-#SBATCH --quotatype=auto
+#SBATCH --quotatype=reserved
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -84,7 +84,8 @@ srun accelerate launch \
   src/train_bash.py \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
-  --dataset lima \
+  --dataset "lima" \
+  --prune_data_type "sft" \
   --cutoff_len ${seq_len} \
   --output_dir ${output_dir} \
   --logging_steps 10 \

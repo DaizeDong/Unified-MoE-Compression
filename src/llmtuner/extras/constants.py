@@ -24,7 +24,7 @@ IGNORE_INDEX = -100
 
 LAYERNORM_NAMES = {"norm", "ln"}
 
-LOG_FILE_NAME = "trainer_log.jsonl"
+LOG_FILE_NAME = "../../../results_pt/test/trainer_log.jsonl"
 
 METHODS = ["full", "freeze", "lora"]
 

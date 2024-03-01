@@ -2,10 +2,9 @@ from functools import partial
 from itertools import chain
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Tuple
 
+from .utils import Role
 from ..extras.constants import IGNORE_INDEX
 from ..extras.logging import get_logger
-from .utils import Role
-
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments
@@ -14,12 +13,11 @@ if TYPE_CHECKING:
     from ..hparams import DataArguments
     from .template import Template
 
-
 logger = get_logger(__name__)
 
 
 def preprocess_pretrain_dataset(
-    examples: Dict[str, List[Any]], tokenizer: "PreTrainedTokenizer", data_args: "DataArguments"
+        examples: Dict[str, List[Any]], tokenizer: "PreTrainedTokenizer", data_args: "DataArguments"
 ) -> Dict[str, List[List[int]]]:
     # build grouped texts with format `X1 X2 X3 ...`
     text_examples = [messages[0]["content"] + tokenizer.eos_token for messages in examples["prompt"]]
@@ -31,17 +29,17 @@ def preprocess_pretrain_dataset(
     total_length = (total_length // block_size) * block_size
     # split by chunks of cutoff_len
     result = {
-        k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+        k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
         for k, t in concatenated_examples.items()
     }
     return result
 
 
 def preprocess_supervised_dataset(
-    examples: Dict[str, List[Any]],
-    tokenizer: "PreTrainedTokenizer",
-    template: "Template",
-    data_args: "DataArguments",
+        examples: Dict[str, List[Any]],
+        tokenizer: "PreTrainedTokenizer",
+        template: "Template",
+        data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     # build inputs with format `<bos> X Y <eos>` and labels with format `<ignore> ... <ignore> Y <eos>`
     # for multiturn examples, we only mask the prompt part in each prompt-response pair.
@@ -54,14 +52,14 @@ def preprocess_supervised_dataset(
         messages = examples["prompt"][i] + examples["response"][i]
         input_ids, labels = [], []
         for turn_idx, (source_ids, target_ids) in enumerate(
-            template.encode_multiturn(
-                tokenizer,
-                messages,
-                examples["system"][i],
-                examples["tools"][i],
-                data_args.cutoff_len,
-                data_args.reserved_label_len,
-            )
+                template.encode_multiturn(
+                    tokenizer,
+                    messages,
+                    examples["system"][i],
+                    examples["tools"][i],
+                    data_args.cutoff_len,
+                    data_args.reserved_label_len,
+                )
         ):
             if data_args.train_on_prompt:
                 source_mask = source_ids
@@ -85,10 +83,10 @@ def preprocess_supervised_dataset(
 
 
 def preprocess_packed_supervised_dataset(
-    examples: Dict[str, List[Any]],
-    tokenizer: "PreTrainedTokenizer",
-    template: "Template",
-    data_args: "DataArguments",
+        examples: Dict[str, List[Any]],
+        tokenizer: "PreTrainedTokenizer",
+        template: "Template",
+        data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     # build inputs with format `<bos> X1 Y1 <eos> <bos> X2 Y2 <eos>`
     # and labels with format `<ignore> ... <ignore> Y1 <eos> <ignore> ... <ignore> Y2 <eos>`
@@ -100,7 +98,7 @@ def preprocess_packed_supervised_dataset(
 
         messages = examples["prompt"][i] + examples["response"][i]
         for source_ids, target_ids in template.encode_multiturn(
-            tokenizer, messages, examples["system"][i], examples["tools"][i]
+                tokenizer, messages, examples["system"][i], examples["tools"][i]
         ):
             if data_args.train_on_prompt:
                 source_mask = source_ids
@@ -122,19 +120,19 @@ def preprocess_packed_supervised_dataset(
     total_length = (total_length // block_size) * block_size
     # split by chunks of cutoff_len
     for i in range(0, total_length, block_size):
-        if not all(label == IGNORE_INDEX for label in labels[i : i + block_size]):
-            model_inputs["input_ids"].append(input_ids[i : i + block_size])
+        if not all(label == IGNORE_INDEX for label in labels[i: i + block_size]):
+            model_inputs["input_ids"].append(input_ids[i: i + block_size])
             model_inputs["attention_mask"].append([1] * block_size)
-            model_inputs["labels"].append(labels[i : i + block_size])
+            model_inputs["labels"].append(labels[i: i + block_size])
 
     return model_inputs
 
 
 def preprocess_unsupervised_dataset(
-    examples: Dict[str, List[Any]],
-    tokenizer: "PreTrainedTokenizer",
-    template: "Template",
-    data_args: "DataArguments",
+        examples: Dict[str, List[Any]],
+        tokenizer: "PreTrainedTokenizer",
+        template: "Template",
+        data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     # build inputs with format `<bos> X` and labels with format `Y <eos>`
     model_inputs = {"input_ids": [], "attention_mask": [], "labels": []}
@@ -168,10 +166,10 @@ def preprocess_unsupervised_dataset(
 
 
 def preprocess_pairwise_dataset(
-    examples: Dict[str, List[Any]],
-    tokenizer: "PreTrainedTokenizer",
-    template: "Template",
-    data_args: "DataArguments",
+        examples: Dict[str, List[Any]],
+        tokenizer: "PreTrainedTokenizer",
+        template: "Template",
+        data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     # build input pairs with format `<bos> X`, `Y1 <eos>` and `Y2 <eos>`
     model_inputs = {"prompt_ids": [], "chosen_ids": [], "rejected_ids": []}
@@ -235,11 +233,11 @@ def print_unsupervised_dataset_example(example: Dict[str, List[int]], tokenizer:
 
 
 def get_preprocess_and_print_func(
-    tokenizer: "PreTrainedTokenizer",
-    template: "Template",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["pt", "sft", "rm", "ppo"],
+        tokenizer: "PreTrainedTokenizer",
+        template: "Template",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        stage: Literal["pt", "sft", "rm", "ppo"],
 ) -> Tuple[Callable, Callable]:
     if stage == "pt":
         preprocess_func = partial(preprocess_pretrain_dataset, tokenizer=tokenizer, data_args=data_args)

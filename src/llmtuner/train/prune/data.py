@@ -82,6 +82,7 @@ def get_c4(nsamples, seed, seqlen, tokenizer):
 
 
 def get_custom_dataset(dataset, nsamples, seed, seqlen):
+    """这个没用到，可以删掉"""
     # Generate samples from training set
     random.seed(seed)
     trainloader = []
@@ -105,9 +106,6 @@ def get_custom_dataset(dataset, nsamples, seed, seqlen):
     # valenc = TokenizerWrapper(valenc)
     valenc = None
     return trainloader, valenc
-
-
-"""这个文件没用了，可以删掉"""
 
 
 # Function to select the appropriate loader based on dataset name
