@@ -10,12 +10,12 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:4
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=8 # should match with --gres
+num_gpu_per_node=4 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -63,6 +63,10 @@ echo "Total GPUs: $num_processes"
 
 #######################################
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/Mixtral-sparsegpt-unstructured-0.5/checkpoint
+model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/Mixtral-wanda-unstructured-0.1/checkpoint
+
+
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/test
 
 source ~/anaconda3/bin/activate compression
@@ -86,6 +90,8 @@ cd /mnt/petrelfs/dongdaize.d/workspace/compression
 #  --logging_steps 10 \
 #  --plot_loss \
 #  --bf16
+dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+dataset=alpaca-gpt4_de
 
 srun torchrun \
   --nnodes ${num_nodes} \
@@ -100,7 +106,7 @@ srun torchrun \
   --do_eval \
   --model_name_or_path ${model_name_or_path} \
   --print_param_status \
-  --dataset lima \
+  --dataset $dataset \
   --finetuning_type full \
   --output_dir ${output_dir} \
   --per_device_train_batch_size 4 \

@@ -73,7 +73,7 @@ n_calibration_samples=32
 seq_len=512
 
 sparsity_ratio=0.5
-prune_method="magnitude" # magnitude gradient-zeroth
+prune_method="magnitude" # magnitude
 config_file="config/accelerate/mixtral_normal.yaml"
 sparsity_type="unstructured"
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/test-Mixtral-${prune_method}-${sparsity_type}-${sparsity_ratio}

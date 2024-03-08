@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
     from ...hparams import DataArguments, FinetuningArguments, ModelArguments, PruningArguments
 
-DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "gradient-first")
+DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "gradient-first", "gradient-zeroth")
 
 
 # 🔍 Modified from src.train.pt.workflow.run_pt
@@ -39,12 +39,11 @@ def run_prune(
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
 
     if pruning_args.prune_method in DATA_AWARE_PRUNING_METHODS:
-        # TODO: add wikitext-2 support in "config/data/wikitext-2.json"
         # 🔍 dataset & data collator & dataloader
         dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.prune_data_type)
 
         if pruning_args.prune_data_type == "pt":
-            data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+            data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)  # concat all data to seq_length for each batch
         elif pruning_args.prune_data_type == "sft":
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
@@ -63,7 +62,7 @@ def run_prune(
                 label_pad_token_id=IGNORE_INDEX if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id,
             )
 
-        dataloader = DataLoader(dataset, batch_size=1, collate_fn=data_collator, num_workers=8)
+        dataloader = DataLoader(dataset, batch_size=1, collate_fn=data_collator, num_workers=8)  # batch size must be 1
 
         accelerator.print("Total Sample Num:", len(dataset))
         accelerator.print("Total Used Sample Num:", pruning_args.n_calibration_samples)
@@ -84,7 +83,7 @@ def run_prune(
     elif AcceleratorState().deepspeed_plugin is not None:
         raise EnvironmentError("Data-independent pruning can only be done without DeepSpeed environment!")
 
-    else:  # use no additional data for pruning, do it on one CPU is OK
+    else:  # use no additional data for pruning, can be done on 1 GPU
         model = accelerator.prepare([model], device_placement=[False])[0]  # 🔍 Prepare model
 
     #######################################################################################################
@@ -125,8 +124,8 @@ def run_prune(
     if pruning_args.prune_model_save_path is not None:
         save_sparse_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
 
-    if training_args.do_eval:
-        # TODO: eval on evaluation set (e.g. wikitext-2 calibration)
-        pass
+    # if training_args.do_eval:
+    #     # TODO: eval on evaluation set (e.g. wikitext-2 calibration)
+    #     pass
 
     accelerator.print("All done!")

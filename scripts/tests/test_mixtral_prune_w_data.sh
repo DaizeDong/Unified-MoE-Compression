@@ -69,11 +69,12 @@ echo "Total GPUs: $num_processes"
 
 #######################################
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-n_calibration_samples=32
-seq_len=512
+n_calibration_samples=32 # for debug usage
+seq_len=512              # for debug usage
 
 sparsity_ratio=0.5
-prune_method="sparsegpt" # wanda sparsegpt gradient-first
+prune_method="sparsegpt" # wanda sparsegpt gradient-first gradient-zeroth
+prune_method="wanda"
 config_file="config/accelerate/mixtral_deepspeed.yaml"
 sparsity_type="unstructured"
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/test-Mixtral-${prune_method}-${sparsity_type}-${sparsity_ratio}
@@ -111,6 +112,7 @@ srun accelerate launch \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
   --dataset "lima" \
+  --split "split" \
   --prune_data_type "sft" \
   --cutoff_len ${seq_len} \
   --output_dir ${output_dir} \

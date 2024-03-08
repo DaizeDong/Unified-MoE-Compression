@@ -82,8 +82,6 @@ srun accelerate launch \
   src/train_bash.py \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
-  --dataset "lima" \
-  --prune_data_type "sft" \
   --output_dir ${output_dir} \
   --logging_steps 10 \
   --bf16 \

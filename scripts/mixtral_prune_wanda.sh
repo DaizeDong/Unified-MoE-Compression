@@ -62,14 +62,22 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 #####################################################################################################################
-n_calibration_samples=256
+#dataset="lima"
+#prune_data_type="sft"
+
+dataset="wikitext2"
+#dataset="c4"
+prune_data_type="pt"
+
+n_calibration_samples=512
 seq_len=2048
+
 sparsity_ratio=0.5
 prune_method="wanda"
 sparsity_type="unstructured"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/Mixtral-${prune_method}-${sparsity_type}-${sparsity_ratio}
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}
 prune_model_save_path=${output_dir}/checkpoint
 
 source ~/anaconda3/bin/activate compression
@@ -84,8 +92,9 @@ srun accelerate launch \
   src/train_bash.py \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
-  --dataset "lima" \
-  --prune_data_type "sft" \
+  --dataset ${dataset} \
+  --split "split" \
+  --prune_data_type ${prune_data_type} \
   --cutoff_len ${seq_len} \
   --output_dir ${output_dir} \
   --logging_steps 10 \

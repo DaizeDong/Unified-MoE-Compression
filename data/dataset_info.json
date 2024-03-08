@@ -293,7 +293,7 @@
     "ms_hub_url": "AI-ModelScope/RLAIF-Nectar",
     "ranking": true
   },
-  "orca_dpo_de" : {
+  "orca_dpo_de": {
     "hf_hub_url": "mayflowergmbh/intel_orca_dpo_pairs_de",
     "ranking": true
   },
@@ -367,5 +367,19 @@
       "prompt": "content"
     },
     "folder": "python"
+  },
+  "wikitext2": {
+    "hf_hub_url": "wikitext-2",
+    "subset": "wikitext-2-raw-v1",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "c4": {
+    "hf_hub_url": "allenai/c4",
+    "subset": "en",
+    "columns": {
+      "prompt": "text"
+    }
   }
 }

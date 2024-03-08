@@ -29,8 +29,11 @@ def save_sparse_model(prune_model_save_path, model, tokenizer, accelerator: Acce
                 save_state_dict[name] = update_state_dict[name]
 
         # check sparsity
+        accelerator.print("*" * 30)
         accelerator.print("Calculating sparsity for all params in the model after update...")
-        check_sparsity_from_state_dict(save_state_dict)
+        sparsity_ratio = check_sparsity_from_state_dict(save_state_dict)
+        accelerator.print(f"sparsity sanity check {sparsity_ratio:.4f}")
+        accelerator.print("*" * 30)
 
         # save updated state dict
         unwrapped_model = accelerator.unwrap_model(model)

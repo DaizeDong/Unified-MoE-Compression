@@ -54,6 +54,7 @@ class DatasetAttr:
 
 def get_dataset_list(data_args: "DataArguments") -> List["DatasetAttr"]:
     dataset_names = [ds.strip() for ds in data_args.dataset.split(",")] if data_args.dataset is not None else []
+    # print(f"data_args.dataset_dir: {data_args.dataset_dir}")
     try:
         with open(os.path.join(data_args.dataset_dir, DATA_CONFIG), "r") as f:
             dataset_info = json.load(f)

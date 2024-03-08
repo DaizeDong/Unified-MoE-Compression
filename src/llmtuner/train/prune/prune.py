@@ -40,6 +40,8 @@ def find_layers_for_moe(module, layers=[nn.Linear], name=''):
     for key in list(res.keys()):
         if "gate" in key:
             res.pop(key)
+        # if 'experts' in key:
+        #     res.pop(key)
     return res
 
 
@@ -87,7 +89,7 @@ def check_sparsity_from_state_dict(state_dict):
             else:
                 layer_params[layer_id].append(name)
 
-    layer_num = max(list(layer_params.keys()))
+    layer_num = max(list(layer_params.keys())) + 1
 
     # Calculate sparsity
     count = 0
@@ -146,7 +148,7 @@ def prepare_calibration_input(model, dataloader, accelerator: Accelerator, num_s
 
 
 @torch.no_grad()
-def prune_template(args, model, dataloader, accelerator: Accelerator, num_samples,  prune_n=0, prune_m=0):
+def prune_template(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0):
     """Template for pruning methods"""
     raise NotImplementedError("Please copy this function and implement the full method.")
 
@@ -188,7 +190,7 @@ def prune_template(args, model, dataloader, accelerator: Accelerator, num_sample
         for name in wrapped_layers:
             handles.append(subset[name].register_forward_hook(add_batch(name)))
         for j in range(num_samples):
-            outputs[j] = layer(inputs[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+            outputs[j] = layer(inputs[j], attention_mask=attention_mask, position_ids=position_ids)[0]
         for h in handles:
             h.remove()
 
@@ -240,7 +242,7 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
             print(f"Pruning module {module_state_dict_name}")
             W = subset[name].weight.data
             W_metric = torch.abs(W)
-
+            print(f"W_metric: {W_metric}")
             if prune_n != 0:
                 W_mask = (torch.zeros_like(W) == 1)
                 for ii in range(W_metric.shape[1]):
@@ -317,8 +319,9 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
             accelerator.print(f"Pruning module {module_state_dict_name}")
             W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
             W_metric = accelerator.reduce(W_metric, reduction="mean")  # 🔍 all reduce across devices
-            W_mask = (torch.zeros_like(W_metric) == 1)  # initialize a mask to be all False
+            W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
 
+            # accelerator.print(f"W_metric: {W_metric}")
             def return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before):
                 thres_cumsum = sum_before * alpha
                 sort_mask = tmp_metric <= thres_cumsum.reshape((-1, 1))
@@ -362,7 +365,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
 
             # 🔍 update the state dict
             # 🔍 the weights would not change if directly updating them using "subset[name].weight.data[W_mask] = 0"
-            update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight * W_mask).bfloat16().cpu()
+            update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight * (torch.ones_like(W_mask) - W_mask)).bfloat16().cpu()
 
         # Update inputs & outputs
         for j in range(num_samples):
@@ -378,7 +381,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
 
 
 @torch.no_grad()
-def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_samples,prune_n=0, prune_m=0, blocksize=128, percdamp=0.01):
+def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0, blocksize=128, percdamp=0.01):
     """
         SparseGPT code available at: https://github.com/IST-DASLab/sparsegpt/tree/f5c25005a61f96a0933ca2f95705a963585aafaa
         :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
