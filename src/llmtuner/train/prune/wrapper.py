@@ -1,8 +1,9 @@
 import math
-
 import torch
-import transformers
 from torch import nn as nn
+
+from src import transformers
+from src.transformers.models.mixtral.modeling_mixtral import Expert
 
 
 class WandaWrapper:
@@ -19,21 +20,24 @@ class WandaWrapper:
         self.layer_id = layer_id
         self.layer_name = layer_name
 
-    def add_batch(self, input, output):
+    def add_batch(self, input, output, routing_scores=None):
+        if isinstance(self.layer, Expert):
+            input = input * routing_scores  # 🔍 add routing_scores
+
         if len(input.shape) == 2:
-            input = input.unsqueeze(0)  # input: shape(batch_size, seq_len, hidden_size)
+            input = input.unsqueeze(0)  # 🔍 input: shape(1, tokens, hidden_size)
         tmp = input.shape[0]
 
-        if isinstance(self.layer, nn.Linear):
+        if isinstance(self.layer, (nn.Linear, Expert)):  # 🔍 for both Linear and Expert
             if len(input.shape) == 3:
                 input = input.reshape((-1, input.shape[-1]))  # input: shape(batch_size * seq_len, hidden_size)
             input = input.t()
+        input = input.type(torch.float32)
+        # print(f"input: {input.size()}, nsamples: {self.nsamples}")
 
         self.scaler_row *= self.nsamples / (self.nsamples + tmp)
         self.nsamples += tmp
-
-        input = input.type(torch.float32)
-        self.scaler_row += torch.norm(input, p=2, dim=1) ** 2 / self.nsamples
+        self.scaler_row += torch.norm(input, p=2, dim=1) ** 2 / self.nsamples  # 🔍 determined by the number of input tokens
 
 
 class SparseGPTWrapper:

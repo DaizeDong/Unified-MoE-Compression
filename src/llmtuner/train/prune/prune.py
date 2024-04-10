@@ -1,18 +1,20 @@
 import sys
-
 import torch
 import torch.nn as nn
 import transformers
 from accelerate import Accelerator
 from tqdm import tqdm
 
+print("transformers", transformers)
+
+from transformers.models.mixtral.modeling_mixtral import Expert
 from .ablate import AblateGPT
 from .data import get_loaders
 from .info import print_gpu_memory
 from .wrapper import WandaWrapper, SparseGPTWrapper
 
 
-def find_layers(module, layers=[nn.Linear], name=''):
+def find_layers(module, layers=[nn.Linear, Expert], name=''):
     """
     Recursively find the layers of a certain type in a module.
 
@@ -24,6 +26,7 @@ def find_layers(module, layers=[nn.Linear], name=''):
     Returns:
         dict: Dictionary of layers of the given type(s) within the module.
     """
+    # print(name, type(module), type(module) in layers)
     if type(module) in layers:
         return {name: module}
     res = {}
@@ -34,7 +37,7 @@ def find_layers(module, layers=[nn.Linear], name=''):
     return res
 
 
-def find_layers_for_moe(module, layers=[nn.Linear], name=''):
+def find_layers_for_moe(module, layers=[nn.Linear, Expert], name=''):
     # 🔍 exclude the gate networks for MoE
     res = find_layers(module, layers, name)
     for key in list(res.keys()):
@@ -148,74 +151,6 @@ def prepare_calibration_input(model, dataloader, accelerator: Accelerator, num_s
 
 
 @torch.no_grad()
-def prune_template(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0):
-    """Template for pruning methods"""
-    raise NotImplementedError("Please copy this function and implement the full method.")
-
-    device = accelerator.device
-    unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
-    use_cache = unwrapped_model.config.use_cache
-    unwrapped_model.config.use_cache = False
-    layers = unwrapped_model.model.layers
-
-    # 🔍 store the pruned parameters in CPU
-    update_state_dict = {}
-
-    accelerator.print("Getting features...")
-    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
-
-    accelerator.print('Starting ...')
-    for i in tqdm(range(len(layers)), desc="Pruning layers...", disable=not accelerator.is_main_process):
-        sys.stderr.flush()
-        torch.cuda.empty_cache()
-        print_gpu_memory(accelerator)
-        layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
-
-        # Wrap layers
-        wrapped_layers = {}
-        for name in subset:
-            # TODO
-            pass
-
-        # Forward hook for recording row importance
-        def add_batch(name):
-            def hook(_, input, output):
-                wrapped_layers[name].add_batch(input[0].data, output.data)
-
-            return hook
-
-        # Get importance
-        handles = []
-        for name in wrapped_layers:
-            handles.append(subset[name].register_forward_hook(add_batch(name)))
-        for j in range(num_samples):
-            outputs[j] = layer(inputs[j], attention_mask=attention_mask, position_ids=position_ids)[0]
-        for h in handles:
-            h.remove()
-
-        # Prune
-        for name in subset:
-            module_state_dict_name = f"model.layers.{i}.{name}"  # 🔍
-            accelerator.print(f"Pruning module {module_state_dict_name}")
-
-            # TODO
-
-            xxxxxx = None
-
-            # 🔍 update the state dict
-            # 🔍 the weights would not change if directly applying them
-            update_state_dict[module_state_dict_name + ".weight"] = xxxxxx.bfloat16().cpu()  # TODO
-
-    accelerator.print("Pruning done!")
-    unwrapped_model.config.use_cache = use_cache
-    torch.cuda.empty_cache()
-
-    # 🔍 return the state dict
-    return update_state_dict
-
-
-@torch.no_grad()
 def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
     device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
@@ -242,7 +177,7 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
             print(f"Pruning module {module_state_dict_name}")
             W = subset[name].weight.data
             W_metric = torch.abs(W)
-            print(f"W_metric: {W_metric}")
+            # print(f"W_metric: {W_metric}")
             if prune_n != 0:
                 W_mask = (torch.zeros_like(W) == 1)
                 for ii in range(W_metric.shape[1]):
@@ -291,18 +226,44 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
         print_gpu_memory(accelerator)
         layer = layers[i]
         subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+        separate = True
+        # separate = False
+
+        if separate:
+            experts_subset = [name for name in subset if "experts" in name]
+            vanilla_subset = [name for name in subset if name not in experts_subset]
+            w1 = [name for name in experts_subset if "w1" in name]
+            w2 = [name for name in experts_subset if "w2" in name]
+            w3 = [name for name in experts_subset if "w3" in name]
+
+        else:
+            vanilla_subset = subset
+            w1 = []
+            w2 = []
+            w3 = []
+
+        accelerator.print(f"w1, w2, w3: {w1, w2, w3}")
+        accelerator.print(f"subset: {subset}")
 
         # Wrap layers
         wrapped_layers = {}
         for name in subset:
-            wrapped_layers[name] = WandaWrapper(subset[name])
+            wrapped_layers[name] = WandaWrapper(subset[name], layer_name=name)
 
         # Forward hook for recording row importance
         def add_batch(name):
             def hook(_, input, output):
                 wrapped_layers[name].add_batch(input[0].data, output.data)
 
-            return hook
+            def moe_hook(_, input, output):
+                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data)  # 🔍 input[1] is routing scores.
+
+            if 'experts' in name:
+                return moe_hook
+            else:
+                return hook
+
+                # accelerator.print(f'subset: {subset}')
 
         # Get importance
         handles = []
@@ -313,12 +274,13 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
         for h in handles:
             h.remove()
 
-        # Prune
-        for name in subset:
+        # 🔍 Prune non-moe weights
+        for name in vanilla_subset:
+            # for name in subset:
             module_state_dict_name = f"model.layers.{i}.{name}"
             accelerator.print(f"Pruning module {module_state_dict_name}")
             W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
-            W_metric = accelerator.reduce(W_metric, reduction="mean")  # 🔍 all reduce across devices
+            W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
             W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
 
             # accelerator.print(f"W_metric: {W_metric}")
@@ -367,9 +329,60 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
             # 🔍 the weights would not change if directly updating them using "subset[name].weight.data[W_mask] = 0"
             update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight * (torch.ones_like(W_mask) - W_mask)).bfloat16().cpu()
 
+        # 🔍 prune moe keys. 
+        print(f"w1, w2, w3: {w1, w2, w3}")
+        for weights in [w1, w2, w3]:
+            if len(weights) == 0:
+                continue
+            # accelerator.print(f"weights: {weights}")
+            All_experts_metric = torch.zeros((len(weights),) + subset[weights[0]].weight.data.size())
+            All_mask = torch.zeros((len(weights),) + subset[weights[0]].weight.data.size())
+
+            for ei in range(len(weights)):
+                name = weights[ei]
+                module_state_dict_name = f"model.layers.{i}.{name}"
+                accelerator.print(f"Pruning module {module_state_dict_name}")
+
+                W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
+                W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
+                if All_experts_metric.device != W_metric.device:
+                    All_experts_metric = All_experts_metric.to(W_metric.device)
+                All_experts_metric[ei, :, :] += W_metric
+
+            if prune_n != 0:
+                # structured n:m sparsity
+                raise NotImplementedError
+            else:
+                if args.use_variant:
+                    # wanda variant
+                    raise NotImplementedError
+                else:
+                    # unstructured pruning
+                    accelerator.print("All_experts_metric", All_experts_metric.shape)
+                    experts, din, dout = All_experts_metric.size()
+                    All_experts_metric = All_experts_metric.transpose(0, 1).reshape(din, experts * dout)
+                    All_mask = All_mask.transpose(0, 1).reshape(din, experts * dout)
+
+                    sort_res = torch.sort(All_experts_metric, dim=-1, stable=True)
+                    indices = sort_res[1][:, :int(All_experts_metric.shape[-1] * args.sparsity_ratio)]
+
+                    if All_mask.device != indices.device:
+                        All_mask = All_mask.to(indices.device)
+                    All_mask.scatter_(-1, indices, True)
+                    All_mask = All_mask.reshape(din, experts, dout).transpose(0, 1)
+
+                    for ei in range(len(weights)):
+                        name = weights[ei]
+                        module_state_dict_name = f"model.layers.{i}.{name}"
+
+                        accelerator.print(f"{module_state_dict_name}: {All_mask[ei].float().mean()}")
+                        update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight
+                                                                                 * (torch.ones_like(All_mask[ei]) - All_mask[ei])).bfloat16().cpu()
+
         # Update inputs & outputs
         for j in range(num_samples):
             outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+
         inputs, outputs = outputs, inputs
 
     accelerator.print("Pruning done!")
@@ -514,6 +527,74 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
         for j in range(num_samples):
             outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
         inputs, outputs = outputs, inputs
+
+    accelerator.print("Pruning done!")
+    unwrapped_model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
+
+    # 🔍 return the state dict
+    return update_state_dict
+
+
+@torch.no_grad()
+def prune_template(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0):
+    """Template for pruning methods"""
+    raise NotImplementedError("Please copy this function and implement the full method.")
+
+    device = accelerator.device
+    unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
+    use_cache = unwrapped_model.config.use_cache
+    unwrapped_model.config.use_cache = False
+    layers = unwrapped_model.model.layers
+
+    # 🔍 store the pruned parameters in CPU
+    update_state_dict = {}
+
+    accelerator.print("Getting features...")
+    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
+
+    accelerator.print('Starting ...')
+    for i in tqdm(range(len(layers)), desc="Pruning layers...", disable=not accelerator.is_main_process):
+        sys.stderr.flush()
+        torch.cuda.empty_cache()
+        print_gpu_memory(accelerator)
+        layer = layers[i]
+        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+
+        # Wrap layers
+        wrapped_layers = {}
+        for name in subset:
+            # TODO
+            pass
+
+        # Forward hook for recording row importance
+        def add_batch(name):
+            def hook(_, input, output):
+                wrapped_layers[name].add_batch(input[0].data, output.data)
+
+            return hook
+
+        # Get importance
+        handles = []
+        for name in wrapped_layers:
+            handles.append(subset[name].register_forward_hook(add_batch(name)))
+        for j in range(num_samples):
+            outputs[j] = layer(inputs[j], attention_mask=attention_mask, position_ids=position_ids)[0]
+        for h in handles:
+            h.remove()
+
+        # Prune
+        for name in subset:
+            module_state_dict_name = f"model.layers.{i}.{name}"  # 🔍
+            accelerator.print(f"Pruning module {module_state_dict_name}")
+
+            # TODO
+
+            xxxxxx = None
+
+            # 🔍 update the state dict
+            # 🔍 the weights would not change if directly applying them
+            update_state_dict[module_state_dict_name + ".weight"] = xxxxxx.bfloat16().cpu()  # TODO
 
     accelerator.print("Pruning done!")
     unwrapped_model.config.use_cache = use_cache

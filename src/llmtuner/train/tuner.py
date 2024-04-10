@@ -2,6 +2,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import torch
 from transformers import PreTrainedModel
+import transformers
+
+print("transformers", transformers)
 
 from .dpo import run_dpo
 from .ppo import run_ppo

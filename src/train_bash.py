@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path = [os.getcwd()] + sys.path
+
 from llmtuner import run_exp
 
 

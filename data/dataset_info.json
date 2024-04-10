@@ -368,8 +368,8 @@
     },
     "folder": "python"
   },
-  "wikitext2": {
-    "hf_hub_url": "wikitext-2",
+  "wikitext": {
+    "hf_hub_url": "wikitext",
     "subset": "wikitext-2-raw-v1",
     "columns": {
       "prompt": "text"
@@ -378,6 +378,18 @@
   "c4": {
     "hf_hub_url": "allenai/c4",
     "subset": "en",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "c4_train": {
+    "file_name": "c4_train_part_of_0.json",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "c4_valid": {
+    "file_name": "c4_valid_part_of_0.json",
     "columns": {
       "prompt": "text"
     }

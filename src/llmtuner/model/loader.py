@@ -1,9 +1,8 @@
+from trl import AutoModelForCausalLMWithValueHead
 from typing import TYPE_CHECKING, Optional, Tuple
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.integrations import is_deepspeed_zero3_enabled
-from trl import AutoModelForCausalLMWithValueHead
-
 from .adapter import init_adapter
 from .patcher import patch_config, patch_model, patch_tokenizer, patch_valuehead_model
 from .utils import load_valuehead_params, register_autoclass

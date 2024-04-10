@@ -34,6 +34,7 @@ def run_prune(
     accelerator = Accelerator()
     accelerator.print(f"{AcceleratorState()}")
     accelerator.print("Pruning Args:", pruning_args)
+    accelerator.print("Model Args:", model_args)
 
     # 🔍 model & tokenizer
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
@@ -114,7 +115,7 @@ def run_prune(
     # 🔍 check sparsity
     if accelerator.is_main_process:
         accelerator.print("*" * 30)
-        accelerator.print("Calculating sparsity for pruned params in the model...")
+        accelerator.print("Calculating sparsity for pruned params in the state dict...")
         sparsity_ratio = check_sparsity_from_state_dict(update_state_dict)
         accelerator.print(f"sparsity sanity check {sparsity_ratio:.4f}")
         accelerator.print("*" * 30)
