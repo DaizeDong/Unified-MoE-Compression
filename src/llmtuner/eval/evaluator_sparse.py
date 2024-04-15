@@ -9,14 +9,15 @@ import numpy as np
 import torch
 from datasets import load_dataset
 from tqdm import tqdm, trange
-from transformers.utils import cached_file
 
+from transformers.utils import cached_file
 from .template import get_eval_template
 from ..data import get_template_and_fix_tokenizer
 from ..extras.constants import CHOICES, SUBJECTS
 from ..hparams import get_eval_sparse_args
 from ..model import dispatch_model, load_model_and_tokenizer
-from ..train.prune.prune import prune_wanda, prune_magnitude, prune_sparsegpt, prune_ablate, check_sparsity_from_state_dict
+from ..train.prune.prune import prune_wanda, prune_magnitude, prune_sparsegpt
+from llmtuner.train.prune.utils import check_sparsity_from_state_dict
 
 
 class Evaluator_Sparse:
@@ -45,8 +46,6 @@ class Evaluator_Sparse:
                 prune_magnitude(pruning_args, self.model, self.tokenizer, prune_n=prune_n, prune_m=prune_m)
             elif pruning_args.prune_method == "sparsegpt":
                 prune_sparsegpt(pruning_args, self.model, self.tokenizer, prune_n=prune_n, prune_m=prune_m)
-            elif "ablate" in pruning_args.prune_method:
-                prune_ablate(pruning_args, self.model, self.tokenizer, prune_n=prune_n, prune_m=prune_m)
 
             ################################################################
             print("*" * 30)

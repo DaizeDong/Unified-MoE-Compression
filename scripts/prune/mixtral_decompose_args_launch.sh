@@ -1,24 +1,22 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=eval
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_pt/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_pt/%x-%j.log
+#SBATCH --job-name=decompose
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
-#SBATCH --quotatype=reserved
-
-# SBATCH --quotatype=reserved
+#SBATCH --gres=gpu:1
 # SBATCH --quotatype=spot
+#SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=4 # should match with --gres
+num_gpu_per_node=1 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -65,46 +63,24 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-#model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/Mixtral
-
-#folder_name="Mixtral-sparsegpt-lima-unstructured-0.5-512"
-#folder_name="Mixtral-wanda-lima-unstructured-0.5-512"
-#folder_name="Mixtral-wanda-wikitext-unstructured-0.5-512"
-#folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128"
-#folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-separate"
-
-#folder_name="Mixtral-sparsegpt-lima-2:4-0.5-512"
-#folder_name="Mixtral-wanda-c4_train-2:4-0.5-128"
-#folder_name="Mixtral-wanda-c4_train-2:4-0.5-1024"
-
-folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-NoAttn-freq-w123-all-l1-gate"
-model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}/checkpoint
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-dataset=alpaca-gpt4_de
-#dataset=c4_valid
+model_name_or_path=$1
+output_dir=$2
+prune_model_save_path=$3
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
 srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
   --main_process_port ${port} \
   src/train_bash.py \
-  --stage pt \
-  --do_eval \
+  --stage "prune" \
   --model_name_or_path ${model_name_or_path} \
-  --dataset ${dataset} \
-  --finetuning_type full \
   --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
   --logging_steps 10 \
-  --plot_loss \
-  --bf16
-
-#  --print_param_status \
+  --bf16 \
+  --prune_method "decompose_moe" \
+  --prune_model_save_path ${prune_model_save_path}

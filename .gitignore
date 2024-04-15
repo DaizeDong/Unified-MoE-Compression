@@ -168,3 +168,5 @@ cache/
 /logs_test_prune/
 /logs_prune/
 /results_pt/
+/results_prune/
+/results_analysis/

@@ -24,13 +24,9 @@ class PruningArguments:
         metadata={"choices": ["unstructured", "4:8", "2:4"]},
     )
 
-    prune_method: Optional[
-        Literal["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude",
-        "ablate_mag_seq", "ablate_wanda_seq", "ablate_mag_iter", "ablate_wanda_iter", "search"]
-    ] = field(
+    prune_method: Optional[str] = field(
         default="wanda",
-        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude",
-                              "ablate_mag_seq", "ablate_wanda_seq", "ablate_mag_iter", "ablate_wanda_iter", "search"]},
+        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe"]},
     )
     use_variant: Optional[bool] = field(
         default=False,
@@ -46,6 +42,12 @@ class PruningArguments:
         default="sft",
         metadata={"choices": ["pt", "sft", "rm", "ppo"],
                   "help": "Path to save the pruned model."},
+    )
+
+    # 🔍
+    pruned_model_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to the pruned model. (Only for Gate-Remapping)"},
     )
 
     def to_dict(self) -> Dict[str, Any]:

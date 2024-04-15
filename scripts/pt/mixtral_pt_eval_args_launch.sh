@@ -65,26 +65,9 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-#model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/Mixtral
-
-#folder_name="Mixtral-sparsegpt-lima-unstructured-0.5-512"
-#folder_name="Mixtral-wanda-lima-unstructured-0.5-512"
-#folder_name="Mixtral-wanda-wikitext-unstructured-0.5-512"
-#folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128"
-#folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-separate"
-
-#folder_name="Mixtral-sparsegpt-lima-2:4-0.5-512"
-#folder_name="Mixtral-wanda-c4_train-2:4-0.5-128"
-#folder_name="Mixtral-wanda-c4_train-2:4-0.5-1024"
-
-folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-NoAttn-freq-w123-all-l1-gate"
-model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}/checkpoint
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-dataset=alpaca-gpt4_de
-#dataset=c4_valid
+model_name_or_path=$1
+output_dir=$2
+dataset=$3
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression

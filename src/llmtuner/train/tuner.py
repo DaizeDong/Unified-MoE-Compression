@@ -8,7 +8,7 @@ print("transformers", transformers)
 
 from .dpo import run_dpo
 from .ppo import run_ppo
-from .prune import run_prune
+from .prune import run_prune,run_prune_remap_gate
 from .pt import run_pt
 from .rm import run_rm
 from .sft import run_sft
@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from transformers import TrainerCallback
 
 logger = get_logger(__name__)
+
+
 
 
 def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["TrainerCallback"]] = None):
@@ -40,6 +42,8 @@ def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["Tra
         run_dpo(model_args, data_args, training_args, finetuning_args, callbacks)
     elif finetuning_args.stage == "prune":  # 🔍
         run_prune(model_args, data_args, training_args, finetuning_args, pruning_args, callbacks)
+    elif finetuning_args.stage == "remap_gate":  # 🔍
+        run_prune_remap_gate(model_args, data_args, training_args, finetuning_args, pruning_args, callbacks)
     else:
         raise ValueError("Unknown task.")
 

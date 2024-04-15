@@ -267,7 +267,7 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
         _set_transformers_logging()
 
     # Check arguments
-    if finetuning_args.stage not in ["pt", "prune"] and data_args.template is None:
+    if finetuning_args.stage not in ["pt", "prune", "remap_gate"] and data_args.template is None:
         raise ValueError("Please specify which `template` to use.")
 
     if finetuning_args.stage != "sft" and training_args.predict_with_generate:

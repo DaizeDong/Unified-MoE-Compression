@@ -8,7 +8,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.integrations import is_deepspeed_zero3_enabled
 
-from src.llmtuner.train.prune.prune import check_sparsity
+from llmtuner.train.prune.utils import check_sparsity
 
 model_name_or_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/test-Mixtral-wanda-unstructured-0.5/checkpoint/"
 model_revision = "main"

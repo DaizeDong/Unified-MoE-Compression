@@ -10,13 +10,13 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:2
-#SBATCH --quotatype=reserved
+#SBATCH --gres=gpu:4
 # SBATCH --quotatype=spot
+#SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=2 # should match with --gres
+num_gpu_per_node=4 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -74,17 +74,33 @@ prune_data_type="pt"
 
 n_calibration_samples=128
 seq_len=2048
-sparsity_ratio=0.5
+sparsity_ratio=0.7
+
 prune_method="wanda"
+prune_method="decompose_moe"
 
 sparsity_type="unstructured"
 #sparsity_type="4:8"
-# sparsity_type="2:4"
+#sparsity_type="2:4"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}"
+#folder_name="debugggggg"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-all"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l0.5"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w2-all-l1"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w23-all-l1"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l1"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l2"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l4"
+folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-freq-w123-all-l1"
+
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
+
+echo ${folder_name}
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
@@ -115,8 +131,8 @@ srun accelerate launch \
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
 
 #dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-dataset=alpaca-gpt4_de,c4_valid
-#dataset=alpaca-gpt4_de
+#dataset=alpaca-gpt4_de,c4_valid
+dataset=alpaca-gpt4_de
 
 srun accelerate launch \
   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
@@ -137,3 +153,5 @@ srun accelerate launch \
   --bf16
 
 #  --print_param_status \
+
+# rm -rf ${prune_model_save_path}
