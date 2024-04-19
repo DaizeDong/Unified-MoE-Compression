@@ -4,7 +4,6 @@ import math
 from typing import TYPE_CHECKING, List, Optional
 
 from transformers import DataCollatorForLanguageModeling, Trainer
-
 from ...data import get_dataset, split_dataset
 from ...extras.ploting import plot_loss
 from ...model import load_model_and_tokenizer
@@ -24,6 +23,7 @@ def run_pt(
         callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
+    print(model)
     # for name, param in model.named_parameters():
     #     print(f"{name}: {param.size()}")
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage="pt")

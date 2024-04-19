@@ -393,5 +393,11 @@
     "columns": {
       "prompt": "text"
     }
+  },
+  "MetaMathQA": {
+    "file_name": "MetaMathQA-395K.json", 
+    "columns": {
+      "prompt": "query"
+    }
   }
 }

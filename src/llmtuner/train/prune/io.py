@@ -86,20 +86,19 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
         accelerator.print("save_state_dict", list(save_state_dict.keys()))
         accelerator.print("update_state_dict", list(update_state_dict.keys()))
 
-        for name, param in save_state_dict.items():
-            if name in update_state_dict:
-                accelerator.print(f"Updating {name} (device = {save_state_dict[name].device})")
-                save_state_dict[name] = update_state_dict[name]
+        for name, param in update_state_dict.items():
+            accelerator.print(f"Updating {name} (device = {update_state_dict[name].device})")
+            save_state_dict[name] = update_state_dict[name]
 
         # 🔍 initialize a new model and save
+        accelerator.print("Initializing the new model...")
         unwrapped_model = accelerator.unwrap_model(model)
         model_decomposed = type(unwrapped_model)(unwrapped_model.config)
-        model_decomposed.save_pretrained(
-            prune_model_save_path,
-            is_main_process=accelerator.is_main_process,
-            save_function=accelerator.save,
-            state_dict=save_state_dict,
-        )
+        model_decomposed.load_state_dict(save_state_dict, strict=False)
+        model_decomposed.bfloat16()
+        accelerator.print("model_decomposed", model_decomposed)
+        accelerator.print("Saving...")
+        model_decomposed.save_pretrained(prune_model_save_path)
         tokenizer.save_pretrained(prune_model_save_path)
 
     accelerator.wait_for_everyone()

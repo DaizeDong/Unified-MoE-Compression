@@ -127,3 +127,33 @@ def load_model_and_tokenizer(
             )
 
     return model, tokenizer
+
+
+def load_tokenizer(
+        model_args: "ModelArguments",
+) -> Tuple["PreTrainedTokenizer"]:
+    r"""
+    Loads pretrained model and tokenizer.
+
+    Support both training and inference.
+    """
+
+    try_download_model_from_ms(model_args)
+
+    config_kwargs = {
+        "trust_remote_code": True,
+        "cache_dir": model_args.cache_dir,
+        "revision": model_args.model_revision,
+        "token": model_args.hf_hub_token,
+        "attn_implementation": "flash_attention_2",  # 🔍
+    }
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        use_fast=model_args.use_fast_tokenizer,
+        split_special_tokens=model_args.split_special_tokens,
+        padding_side="right",
+        **config_kwargs,
+    )
+
+    return tokenizer

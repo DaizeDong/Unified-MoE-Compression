@@ -77,8 +77,10 @@ echo "Total GPUs: $num_processes"
 #folder_name="Mixtral-sparsegpt-lima-2:4-0.5-512"
 #folder_name="Mixtral-wanda-c4_train-2:4-0.5-128"
 #folder_name="Mixtral-wanda-c4_train-2:4-0.5-1024"
+#folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-NoAttn-freq-w123-all-l1-gate"
 
-folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-NoAttn-freq-w123-all-l1-gate"
+folder_name="Mixtral-decompose_moe-0.5"
+
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}/checkpoint
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
 

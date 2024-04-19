@@ -801,29 +801,50 @@ def gate_remap(model, model_pruned, dataloader, accelerator: Accelerator, num_sa
             h.remove()
 
         # 🔍 remap the gates
-        for name in subset:
-            module_state_dict_name = f"model.layers.{i}.{name.replace('._fsdp_wrapped_module', '')}"  # 🔍
-            accelerator.print(f"Aggregating {module_state_dict_name}")
+        if i > 0:  # we skip layer 0 whose inputs are intact
+            for name in subset:
+                module_state_dict_name = f"model.layers.{i}.{name.replace('._fsdp_wrapped_module', '')}"  # 🔍
+                accelerator.print(f"Aggregating {module_state_dict_name}")
 
-            # aggregate sample hidden states
-            original_dense_gate_outputs = torch.cat(subsets[name].outputs, dim=0)  # (total_token_num, num_experts)
-            sparse_gate_inputs = torch.cat(subsets_pruned[name].inputs, dim=0)  # (total_token_num, hidden_dim)
-            sparse_gate_outputs = torch.cat(subsets_pruned[name].outputs, dim=0)  # (total_token_num, num_experts)
+                # aggregate sample hidden states
+                original_dense_gate_outputs = torch.cat(subsets[name].outputs, dim=0)  # (total_token_num, num_experts)
+                sparse_gate_inputs = torch.cat(subsets_pruned[name].inputs, dim=0)  # (total_token_num, hidden_dim)
+                sparse_gate_outputs = torch.cat(subsets_pruned[name].outputs, dim=0)  # (total_token_num, num_experts)
 
-            original_dense_gate_outputs = accelerator.gather(original_dense_gate_outputs)  # 🔍 all gather across devices
-            sparse_gate_inputs = accelerator.gather(sparse_gate_inputs)
-            sparse_gate_outputs = accelerator.gather(sparse_gate_outputs)
+                total_token_num_each_device = original_dense_gate_outputs.shape[0]
 
-            print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
-            print(f"new_gate_inputs: {sparse_gate_inputs.shape}")
+                if total_token_num_each_device * accelerator.num_processes <= 128 * 2048:  # can handle it with 80G GPU memory
+                    # use gathered hidden_states ro calculate the inverse
+                    original_dense_gate_outputs = accelerator.gather(original_dense_gate_outputs)  # 🔍 all gather across devices
+                    accelerator.print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
+                    sparse_gate_outputs = accelerator.gather(sparse_gate_outputs)  # 🔍 all gather across devices
+                    accelerator.print(f"Former Relative L2 Loss: {torch.pow(sparse_gate_outputs - original_dense_gate_outputs, exponent=2).mean()}")
 
-            remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
-            accelerator.print(f"Former Relative L2 Loss: {torch.pow(sparse_gate_outputs - original_dense_gate_outputs, exponent=2).mean()}")
-            accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
+                    sparse_gate_outputs.cpu()
+                    torch.cuda.empty_cache()
 
-            # 🔍 update the state dict
-            # 🔍 the weights would not change if directly applying them
-            update_state_dict[module_state_dict_name + ".weight"] = remapped_weights.t().bfloat16().cpu()
+                    sparse_gate_inputs = accelerator.gather(sparse_gate_inputs)  # 🔍 all gather across devices
+                    remapped_weights = torch.linalg.lstsq(sparse_gate_inputs, original_dense_gate_outputs).solution
+                    # remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
+                    accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
+                else:
+                    # calculate the inverse on each device, and then average the remapped_weights over devices
+                    accelerator.print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
+                    accelerator.print(f"Former Relative L2 Loss: {torch.pow(sparse_gate_outputs - original_dense_gate_outputs, exponent=2).mean()}")
+
+                    sparse_gate_outputs.cpu()
+                    torch.cuda.empty_cache()
+
+                    remapped_weights = torch.linalg.lstsq(sparse_gate_inputs, original_dense_gate_outputs).solution
+                    accelerator.print("remapped_weights", remapped_weights)
+                    # remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
+                    remapped_weights = accelerator.reduce(remapped_weights, reduction="mean")  # 🔍 all reduce across devices
+                    # HERE IS WHERE THE ERROR OCCURS
+                    accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
+
+                # 🔍 update the state dict
+                # 🔍 the weights would not change if directly applying them
+                update_state_dict[module_state_dict_name + ".weight"] = remapped_weights.t().bfloat16().cpu()
 
         # Update inputs & outputs
         inputs, outputs = outputs, inputs

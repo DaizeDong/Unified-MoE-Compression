@@ -791,40 +791,52 @@ class Expert(nn.Linear):
 
 
 class MixtralBlockSparseTop2MLP(nn.Module):
-    def __init__(self, config: MixtralConfig):
+    def __init__(self, config: MixtralConfig, layer_index: int, expert_index: int) -> None:
         super().__init__()
+        self.config = config
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
 
-        if hasattr(config, "decomposed") and config.decomposed and hasattr(config, "parameter_ratio") and config.reduced_rank:
-            reduced_rank = math.ceil(config.parameter_ratio * (self.hidden_dim * self.ffn_dim) / (self.hidden_dim + self.ffn_dim))
-            self.w1 = LoSparseLinear(self.hidden_dim, self.ffn_dim, reduced_rank, has_bias=False, has_sparse=config.has_sparse)
-            self.w2 = LoSparseLinear(self.ffn_dim, self.hidden_dim, reduced_rank, has_bias=False, has_sparse=config.has_sparse)
-            self.w3 = LoSparseLinear(self.hidden_dim, self.ffn_dim, reduced_rank, has_bias=False, has_sparse=config.has_sparse)
+        if hasattr(config, "decomposed") and config.decomposed:
+            if isinstance(config.reduced_rank, int):
+                reduced_rank = config.reduced_rank
+                # reduced_rank = math.ceil(config.parameter_ratio * (self.hidden_dim * self.ffn_dim) / (self.hidden_dim + self.ffn_dim))
+                self.w1 = LoSparseLinear(self.hidden_dim, self.ffn_dim, reduced_rank, has_bias=False, has_sparse=config.has_sparse)
+                self.w2 = LoSparseLinear(self.ffn_dim, self.hidden_dim, reduced_rank, has_bias=False, has_sparse=config.has_sparse)
+                self.w3 = LoSparseLinear(self.hidden_dim, self.ffn_dim, reduced_rank, has_bias=False, has_sparse=config.has_sparse)
+            else:  # list
+                reduced_rank_w1 = config.reduced_rank[layer_index]["w1"][expert_index]
+                reduced_rank_w2 = config.reduced_rank[layer_index]["w2"][expert_index]
+                reduced_rank_w3 = config.reduced_rank[layer_index]["w3"][expert_index]
+                self.w1 = LoSparseLinear(self.hidden_dim, self.ffn_dim, reduced_rank_w1, has_bias=False, has_sparse=config.has_sparse)
+                self.w2 = LoSparseLinear(self.ffn_dim, self.hidden_dim, reduced_rank_w2, has_bias=False, has_sparse=config.has_sparse)
+                self.w3 = LoSparseLinear(self.hidden_dim, self.ffn_dim, reduced_rank_w3, has_bias=False, has_sparse=config.has_sparse)
         else:
-            self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-            self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-            self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-            # self.w1 = Expert(self.hidden_dim, self.ffn_dim, bias=False)  # gate_proj
-            # self.w2 = Expert(self.ffn_dim, self.hidden_dim, bias=False)  # down_proj
-            # self.w3 = Expert(self.hidden_dim, self.ffn_dim, bias=False)  # up_proj
+            # self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+            # self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
+            # self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+            # TODO for wanda pruning
+            self.w1 = Expert(self.hidden_dim, self.ffn_dim, bias=False)  # gate_proj
+            self.w2 = Expert(self.ffn_dim, self.hidden_dim, bias=False)  # down_proj
+            self.w3 = Expert(self.hidden_dim, self.ffn_dim, bias=False)  # up_proj
 
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states):
-        # 🔍 The vanilla version.
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        # The code snippet is using the variable `current_hidden_states` as input to a function or method
-        # called `w2`. The result of this function call is then assigned back to the variable
-        # `current_hidden_states`.
-        return current_hidden_states
-
-    # def forward(self, hidden_states, routing_scores=None):
-    #     # 🔍 To get the hook of routing scores.
-    #     current_hidden_states = self.act_fn(self.w1(hidden_states, routing_scores)) * self.w3(hidden_states, routing_scores)
-    #     current_hidden_states = self.w2(current_hidden_states, routing_scores)
+    # def forward(self, hidden_states):
+    #     # 🔍 The vanilla version.
+    #     current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+    #     current_hidden_states = self.w2(current_hidden_states)
+    #     # The code snippet is using the variable `current_hidden_states` as input to a function or method
+    #     # called `w2`. The result of this function call is then assigned back to the variable
+    #     # `current_hidden_states`.
     #     return current_hidden_states
+
+    # TODO for wanda pruning
+    def forward(self, hidden_states, routing_scores=None):
+        # 🔍 To get the hook of routing scores.
+        current_hidden_states = self.act_fn(self.w1(hidden_states, routing_scores)) * self.w3(hidden_states, routing_scores)
+        current_hidden_states = self.w2(current_hidden_states, routing_scores)
+        return current_hidden_states
 
 
 class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
@@ -847,7 +859,7 @@ class MixtralSparseMoeBlock(nn.Module):
     and memory on padding.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, layer_index):
         super().__init__()
         self.hidden_dim = config.hidden_size
         self.ffn_dim = config.intermediate_size
@@ -857,7 +869,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config, layer_index=layer_index, expert_index=i) for i in range(self.num_experts)])
 
         # 🔍 for pruning only, doesn't affect the forward results
         self.temperature = 1.0
@@ -876,12 +888,12 @@ class MixtralSparseMoeBlock(nn.Module):
         routing_weights = routing_weights.to(hidden_states.dtype)
 
         #####################################
-        # 🔍 the routing scores with temperature for adjusting sparsity
+        # # 🔍 the routing scores with temperature for adjusting sparsity
         routing_weights_sparsity = F.softmax(router_logits / self.temperature, dim=1, dtype=torch.float)
         routing_weights_sparsity, selected_experts = torch.topk(routing_weights_sparsity, self.top_k, dim=-1)
-        routing_weights_sparsity /= routing_weights_sparsity.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights_sparsity = routing_weights_sparsity.to(hidden_states.dtype)
+        # routing_weights_sparsity /= routing_weights_sparsity.sum(dim=-1, keepdim=True)
+        # # we cast back to the input dtype
+        # routing_weights_sparsity = routing_weights_sparsity.to(hidden_states.dtype)
         #####################################
 
         final_hidden_states = torch.zeros(
@@ -908,9 +920,10 @@ class MixtralSparseMoeBlock(nn.Module):
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
-            # routing_scores_sparsity = routing_weights_sparsity[top_x_list, idx_list, None]  # 🔍
-            # current_hidden_states = expert_layer(current_state, routing_scores_sparsity) * routing_weights[top_x_list, idx_list, None]
+            # current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
+            # 🔍 for pruning with dynamic sparsity
+            routing_scores_sparsity = routing_weights_sparsity[top_x_list, idx_list, None]
+            current_hidden_states = expert_layer(current_state, routing_scores_sparsity) * routing_weights[top_x_list, idx_list, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
@@ -926,7 +939,7 @@ class MixtralDecoderLayer(nn.Module):
 
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_index=layer_idx)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

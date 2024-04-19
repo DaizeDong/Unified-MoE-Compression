@@ -5,18 +5,18 @@
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
 #SBATCH --partition=MoE
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
+#SBATCH --ntasks-per-node=2
+#SBATCH --cpus-per-task=64
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:8
 #SBATCH --quotatype=reserved
 # SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=4 # should match with --gres
+num_gpu_per_node=8 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -72,15 +72,15 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-n_calibration_samples=128
+n_calibration_samples=2048 # 1024 2048
 seq_len=2048
 
 dense_model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 
-sparse_folder_name="Mixtral-wanda-c4_train-unstructured-0.5-128-NoAttn-freq-w123-all-l1"
+sparse_folder_name="Mixtral-decompose_moe-0.5-sparse-permute"
 sparse_model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${sparse_folder_name}/checkpoint
 
-save_folder_name=${sparse_folder_name}-gate
+save_folder_name="${sparse_folder_name}-gate"
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${save_folder_name}
 prune_model_save_path=${output_dir}/checkpoint
 

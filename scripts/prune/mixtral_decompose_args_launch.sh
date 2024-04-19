@@ -63,9 +63,10 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-model_name_or_path=$1
-output_dir=$2
-prune_model_save_path=$3
+sparsity_ratio=$1
+model_name_or_path=$2
+output_dir=$3
+prune_model_save_path=$4
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
@@ -82,5 +83,6 @@ srun accelerate launch \
   --output_dir ${output_dir} \
   --logging_steps 10 \
   --bf16 \
+  --sparsity_ratio ${sparsity_ratio} \
   --prune_method "decompose_moe" \
   --prune_model_save_path ${prune_model_save_path}

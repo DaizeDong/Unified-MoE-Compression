@@ -11,8 +11,8 @@
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
-# SBATCH --quotatype=spot
-#SBATCH --quotatype=auto
+#SBATCH --quotatype=spot
+# SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -69,15 +69,18 @@ echo "Total GPUs: $num_processes"
 #dataset="wikitext"
 #prune_data_type="pt"
 
-dataset="c4_train"
+# dataset="c4_train"
+dataset="MetaMathQA"
+# dataset="codealpaca"
+
 prune_data_type="pt"
 
 n_calibration_samples=128
 seq_len=2048
-sparsity_ratio=0.7
+sparsity_ratio=0.5
 
 prune_method="wanda"
-prune_method="decompose_moe"
+# prune_method="decompose_moe"
 
 sparsity_type="unstructured"
 #sparsity_type="4:8"

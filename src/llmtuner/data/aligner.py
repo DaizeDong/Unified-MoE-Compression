@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 def convert_alpaca(examples: Dict[str, List[Any]], dataset_attr: "DatasetAttr") -> Dict[str, List[Any]]:
     outputs = {"prompt": [], "response": [], "system": [], "tools": []}
+    # print(f"examples: {examples}")
     for i in range(len(examples[dataset_attr.prompt])):
         prompt = []
         if dataset_attr.history and isinstance(examples[dataset_attr.history][i], list):

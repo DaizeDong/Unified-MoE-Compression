@@ -13,8 +13,8 @@ from ..dpo.collator import DPODataCollatorWithPadding
 from ..rm.collator import PairwiseDataCollatorWithPadding
 from ...data import get_dataset
 from ...extras.constants import IGNORE_INDEX
-from ...model import load_model_and_tokenizer
-from ...train.prune.prune import prune_wanda_moe, prune_magnitude, prune_sparsegpt
+from ...model import load_model_and_tokenizer, load_tokenizer
+from ...train.prune.prune import prune_wanda_moe, prune_magnitude, prune_sparsegpt, prune_wanda
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
@@ -41,7 +41,8 @@ def run_prune(
 
     # 🔍 model & tokenizer
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
-
+    # tokenizer = load_tokenizer(model_args)
+    
     if pruning_args.prune_method in DATA_AWARE_PRUNING_METHODS:
         # 🔍 dataset & data collator & dataloader
         dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.prune_data_type)
@@ -101,7 +102,8 @@ def run_prune(
         prune_n, prune_m = map(int, pruning_args.sparsity_type.split(":"))
 
     if pruning_args.prune_method == "wanda":
-        update_state_dict = prune_wanda_moe(pruning_args, model, dataloader, accelerator, num_samples_each_device, prune_n=prune_n, prune_m=prune_m)
+        update_state_dict = prune_wanda(pruning_args, model, dataloader, accelerator, num_samples_each_device, prune_n=prune_n, prune_m=prune_m)
+        # update_state_dict = prune_wanda_moe(pruning_args, model, dataloader, accelerator, num_samples_each_device, prune_n=prune_n, prune_m=prune_m)
     elif pruning_args.prune_method == "sparsegpt":
         update_state_dict = prune_sparsegpt(pruning_args, model, dataloader, accelerator, num_samples_each_device, prune_n=prune_n, prune_m=prune_m)
     elif pruning_args.prune_method == "gradient-first":
@@ -111,7 +113,12 @@ def run_prune(
     elif pruning_args.prune_method == "magnitude":
         update_state_dict = prune_magnitude(pruning_args, model, accelerator, prune_n=prune_n, prune_m=prune_m)  # Data-independent
     elif pruning_args.prune_method == "decompose_moe":
-        update_state_dict = decompose_moe(model, accelerator, parameter_ratio=0.15, has_sparse=False, use_svd=True)  # Data-independent
+        pruning_args.sparsity_ratio = 1.0 - pruning_args.sparsity_ratio
+        level = "layer"  # expert layer model
+        has_sparse = True
+        do_permute = True  # 🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍
+        use_svd = True
+        update_state_dict = decompose_moe(pruning_args, model, accelerator, level=level, has_sparse=has_sparse, do_permute=do_permute, use_svd=use_svd)  # Data-independent
     else:
         raise NotImplementedError
     #######################################################################################################
@@ -119,16 +126,13 @@ def run_prune(
     # 🔍 Set config for low-rank decomposition.
     accelerator.print(f"model: {model}")
 
+    # 🔍 Save sparse model to disk
     if pruning_args.prune_method == "decompose_moe":
         setattr(model.config, "decomposed", True)
-        setattr(model.config, "reduced_rank", update_state_dict["model.layers.0.block_sparse_moe.experts.0.w1.left.weight"].shape[1])
-        setattr(model.config, "has_sparse", False)
-        # 🔍 Save sparse model to disk
+        setattr(model.config, "has_sparse", has_sparse)
         if pruning_args.prune_model_save_path is not None:
             save_decomposed_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
-
     else:
-        # 🔍 Save sparse model to disk
         if pruning_args.prune_model_save_path is not None:
             save_sparse_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, update_state_dict, check_sparsity=True)
 
@@ -163,6 +167,7 @@ def run_prune_remap_gate(
     model_pruned_args.model_name_or_path = pruning_args.pruned_model_path
     model_pruned, _ = load_model_and_tokenizer(model_pruned_args, finetuning_args, training_args.do_train)
 
+    tokenizer = load
     # 🔍 dataset & data collator & dataloader
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.prune_data_type)
 

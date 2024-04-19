@@ -52,10 +52,6 @@ def find_layers_for_moe(module, layers=[nn.Linear, Expert], name=''):
     return res
 
 
-def find_modules_for_moe(module, layers=[MixtralBlockSparseTop2MLP], name=''):
-    res = find_layers(module, layers, name)
-    return res
-
 
 def find_gates_for_moe(module, layers=[nn.Linear], name=''):
     # 🔍 find only the gate network
