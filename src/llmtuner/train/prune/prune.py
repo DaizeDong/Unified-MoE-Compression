@@ -83,10 +83,10 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
     outputs_for_scores = [None for _ in range(len(outputs))]
 
     accelerator.print('Starting ...')
-    # #####################################
+    ######################################
     pre_defined_sparsity = True
     # pre_defined_sparsity = False  # 是否只借助score，为每个专家分配固定的稀疏率。如果为否，则按照之前的实现，对合并后的"All_experts_metric"进行sort
-    # #####################################
+    ######################################
 
     expert_scores, expert_numels = {}, {}
     # 🔍 TODO compute sparse ratios for experts. 

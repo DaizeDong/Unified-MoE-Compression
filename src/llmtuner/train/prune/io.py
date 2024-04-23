@@ -103,3 +103,7 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
 
     accelerator.wait_for_everyone()
     accelerator.print(f"Model saved to {prune_model_save_path}")
+
+
+def save_expert_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, update_state_dict):
+    pass

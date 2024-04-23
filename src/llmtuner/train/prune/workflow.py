@@ -1,4 +1,4 @@
-# Inspired by: https://github.com/huggingface/transformers/blob/v4.34.1/examples/pytorch/language-modeling/run_clm.py
+import types
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from copy import deepcopy
@@ -9,18 +9,20 @@ from transformers import DataCollatorForSeq2Seq, DataCollatorForLanguageModeling
 from .decompose import decompose_moe
 from .io import save_sparse_model, save_update_state_dict, save_decomposed_model
 from .prune import gate_remap
+from .wrapper import PrunableMixtralSparseMoeBlockWrapper, CacheDataset
 from ..dpo.collator import DPODataCollatorWithPadding
 from ..rm.collator import PairwiseDataCollatorWithPadding
 from ...data import get_dataset
 from ...extras.constants import IGNORE_INDEX
-from ...model import load_model_and_tokenizer, load_tokenizer
-from ...train.prune.prune import prune_wanda_moe, prune_magnitude, prune_sparsegpt, prune_wanda
+from ...model import load_model_and_tokenizer
+from ...train.prune.expert_drop import Expert_Drop_Methods
+from ...train.prune.prune import prune_magnitude, prune_sparsegpt, prune_wanda
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
     from ...hparams import DataArguments, FinetuningArguments, ModelArguments, PruningArguments
 
-DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "gradient-first", "gradient-zeroth")
+DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "expert_drop")
 
 
 # 🔍 Modified from src.llmtuner.train.pt.workflow.run_pt
@@ -42,7 +44,7 @@ def run_prune(
     # 🔍 model & tokenizer
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
     # tokenizer = load_tokenizer(model_args)
-    
+
     if pruning_args.prune_method in DATA_AWARE_PRUNING_METHODS:
         # 🔍 dataset & data collator & dataloader
         dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.prune_data_type)
@@ -76,6 +78,27 @@ def run_prune(
         if pruning_args.n_calibration_samples > len(dataset):
             raise ValueError("Number of calibration samples is greater than the number of samples in the dataset!")
 
+        # 🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍
+        # Special for expert-drop.
+        # We need to wrap the model before "accelerator.prepare" so that the wrapped modules are maintained by DeepSpeed.
+        if pruning_args.prune_method == "expert_drop":
+            layers = model.model.layers
+            for l, layer in enumerate(layers):
+                layer.r = pruning_args.r
+                layer.experts_to_drop = None
+                layer.cache_space = CacheDataset()
+                layer.cache_logits = False
+                layer.cache_X = True
+                layer.cache_Z = True
+                layer.forward = types.MethodType(PrunableMixtralSparseMoeBlockWrapper.forward, layer)
+                layer.enumerate = types.MethodType(PrunableMixtralSparseMoeBlockWrapper.enumerate, layer)
+                layer.update_dropped_experts = types.MethodType(PrunableMixtralSparseMoeBlockWrapper.update_dropped_experts, layer)
+                layer.prune = types.MethodType(PrunableMixtralSparseMoeBlockWrapper.prune, layer)
+
+                # layer.block_sparse_moe = PrunableMixtralSparseMoeBlockWrapper(layer.block_sparse_moe, r=pruning_args.r)
+                # layer.block_sparse_moe.cache_X = True
+                # layer.block_sparse_moe.cache_Z = True
+
         # 🔍 Prepare model & dataloader
         print("Preparing model...")
         model, dataloader = accelerator.prepare(model, dataloader)
@@ -86,10 +109,9 @@ def run_prune(
         accelerator.print("Number of samples per device:", len(dataloader))
         accelerator.print("Number of used samples per device:", num_samples_each_device)
 
-    elif AcceleratorState().deepspeed_plugin is not None:
-        raise EnvironmentError("Data-independent pruning can only be done without DeepSpeed environment!")
-
     else:  # use no additional data for pruning, can be done on 1 GPU
+        if AcceleratorState().deepspeed_plugin is not None:
+            raise EnvironmentError("Data-independent pruning can only be done without DeepSpeed environment!")
         print("Preparing model...")
         model = accelerator.prepare([model], device_placement=[False])[0]  # 🔍 Prepare model
 
@@ -116,9 +138,11 @@ def run_prune(
         pruning_args.sparsity_ratio = 1.0 - pruning_args.sparsity_ratio
         level = "layer"  # expert layer model
         has_sparse = True
-        do_permute = True  # 🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍
+        do_permute = True
         use_svd = True
         update_state_dict = decompose_moe(pruning_args, model, accelerator, level=level, has_sparse=has_sparse, do_permute=do_permute, use_svd=use_svd)  # Data-independent
+    elif pruning_args.prune_method == "expert_drop":
+        model, info = Expert_Drop_Methods[pruning_args.expert_drop_method](pruning_args, model, dataloader, accelerator, num_samples_each_device)
     else:
         raise NotImplementedError
     #######################################################################################################
@@ -167,7 +191,7 @@ def run_prune_remap_gate(
     model_pruned_args.model_name_or_path = pruning_args.pruned_model_path
     model_pruned, _ = load_model_and_tokenizer(model_pruned_args, finetuning_args, training_args.do_train)
 
-    tokenizer = load
+    # tokenizer = load
     # 🔍 dataset & data collator & dataloader
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.prune_data_type)
 

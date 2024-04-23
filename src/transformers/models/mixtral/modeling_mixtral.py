@@ -787,6 +787,7 @@ MIXTRAL_ATTENTION_CLASSES = {
 
 class Expert(nn.Linear):
     def forward(self, input: torch.Tensor, routing_scores: torch.Tensor) -> torch.Tensor:
+        # print(f"input: {input.size()}, weight: {self.weight.size()}")
         return super().forward(input)
 
 

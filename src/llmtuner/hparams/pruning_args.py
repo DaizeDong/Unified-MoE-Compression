@@ -2,11 +2,20 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
 
+Expert_Drop_METHODS = ('layerwise_pruning', 'progressive_pruning', 'dynamic_skipping') 
+
 @dataclass
 class PruningArguments:
     r"""
     Arguments pertaining to specify the decoding parameters.
     """
+    expert_drop_method: Optional[str] = field(        
+        metadata={"help": ' '.join(['Supported pruning methods:'] + list(Expert_Drop_METHODS)), 
+            "choices": ["layerwise_pruning", "progressive_pruning", "dynamic_skipping"]},
+    )
+    r: Optional[int] = field(
+        default=4,
+        metadata={"help": 'Number of experts to preserve'})
     prune_seed: Optional[int] = field(
         default=42,
         metadata={"help": "Seed for sampling the calibration data."},
@@ -35,7 +44,7 @@ class PruningArguments:
     )
     prune_method: Optional[str] = field(
         default="wanda",
-        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe"]},
+        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe", "expert_drop"]},
     )
     use_variant: Optional[bool] = field(
         default=False,
