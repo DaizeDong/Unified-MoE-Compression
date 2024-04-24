@@ -76,6 +76,8 @@ dataset="c4_train"
 prune_data_type="pt"
 
 n_calibration_samples=128
+n_calibration_samples=32
+
 seq_len=2048
 r=4
 
@@ -90,8 +92,32 @@ prune_model_save_path=${output_dir}/checkpoint
 
 echo ${folder_name}
 
-source ~/anaconda3/bin/activate compression
+# source ~/anaconda3/bin/activate compression
+source deactivate
+source activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
+
+# srun accelerate launch \
+#   --config_file "config/accelerate/mixtral_fsdp.yaml" \
+#   --num_processes ${num_processes} \
+#   --num_machines ${num_nodes} \
+#   --main_process_ip ${head_node_ip} \
+#   --main_process_port ${port} \
+#   src/train_bash.py \
+#   --stage prune \
+#   --model_name_or_path ${model_name_or_path} \
+#   --dataset ${dataset} \
+#   --split "train" \
+#   --prune_data_type ${prune_data_type} \
+#   --cutoff_len ${seq_len} \
+#   --output_dir ${output_dir} \
+#   --logging_steps 10 \
+#   --bf16 \
+#   --n_calibration_samples ${n_calibration_samples} \
+#   --prune_method ${prune_method} \
+#   --expert_drop_method ${expert_drop_method} \
+#   --r ${r} \
+#   --prune_model_save_path ${prune_model_save_path}
 
 srun accelerate launch \
   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
@@ -116,30 +142,30 @@ srun accelerate launch \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
-#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-#
-##dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-##dataset=alpaca-gpt4_de,c4_valid
-#dataset=alpaca-gpt4_de
-#
-#srun accelerate launch \
-#  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-#  --num_processes ${num_processes} \
-#  --num_machines ${num_nodes} \
-#  --main_process_ip ${head_node_ip} \
-#  --main_process_port ${port} \
-#  src/train_bash.py \
-#  --stage pt \
-#  --do_eval \
-#  --model_name_or_path ${prune_model_save_path} \
-#  --dataset ${dataset} \
-#  --finetuning_type full \
-#  --output_dir ${output_dir} \
-#  --per_device_train_batch_size 4 \
-#  --logging_steps 10 \
-#  --plot_loss \
-#  --bf16
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
 
-#  --print_param_status \
+#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+#dataset=alpaca-gpt4_de,c4_valid
+dataset=alpaca-gpt4_de
 
-# rm -rf ${prune_model_save_path}
+srun accelerate launch \
+  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --num_processes ${num_processes} \
+  --num_machines ${num_nodes} \
+  --main_process_ip ${head_node_ip} \
+  --main_process_port ${port} \
+  src/train_bash.py \
+  --stage pt \
+  --do_eval \
+  --model_name_or_path ${prune_model_save_path} \
+  --dataset ${dataset} \
+  --finetuning_type full \
+  --output_dir ${output_dir} \
+  --per_device_train_batch_size 4 \
+  --logging_steps 10 \
+  --plot_loss \
+  --bf16 \
+  --expert_drop_method ${expert_drop_method} \
+  --print_param_status
+
+rm -rf ${prune_model_save_path}

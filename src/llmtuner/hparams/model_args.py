@@ -7,7 +7,6 @@ class ModelArguments:
     r"""
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune.
     """
-
     model_name_or_path: str = field(
         metadata={
             "help": "Path to the model weight or identifier from huggingface.co/models or modelscope.cn/models."
@@ -121,7 +120,13 @@ class ModelArguments:
         default=False,
         metadata={"help": "For debugging purposes, print the status of the parameters in the model."},
     )
-
+    autogptq: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "whether to use autogptq."
+        },
+    )
+    
     def __post_init__(self):
         self.compute_dtype = None
         self.model_max_length = None

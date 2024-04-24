@@ -1,8 +1,7 @@
 import torch
-from accelerate import Accelerator
 from torch import nn as nn, cuda
 
-from transformers.models.mixtral.modeling_mixtral import Expert, MixtralBlockSparseTop2MLP
+from transformers.models.mixtral.modeling_mixtral import ExpertLinear, MixtralSparseMoeBlock
 
 
 def print_gpu_memory(accelerator):
@@ -18,7 +17,7 @@ def print_gpu_memory_device():
     print(f"GPU {device} Used Memory: {used_memory}MB")
 
 
-def find_layers(module, layers=[nn.Linear, Expert], name=''):
+def find_modules(module, layers=[], name='') -> dict:
     """
     Recursively find the layers of a certain type in a module.
 
@@ -35,15 +34,24 @@ def find_layers(module, layers=[nn.Linear, Expert], name=''):
         return {name: module}
     res = {}
     for name1, child in module.named_children():
-        res.update(find_layers(
+        res.update(find_modules(
             child, layers=layers, name=name + '.' + name1 if name != '' else name1
         ))
     return res
 
 
-def find_layers_for_moe(module, layers=[nn.Linear, Expert], name=''):
+def find_moe_expert_linears_and_gate(module, layers=[nn.Linear, ExpertLinear], name='') -> dict:
+    # 🔍 find the expert weights and gate weights
+    res = find_modules(module, layers, name)
+    for key in list(res.keys()):
+        if 'self_attn' in key:
+            res.pop(key)
+    return res
+
+
+def find_moe_expert_linears(module, layers=[nn.Linear, ExpertLinear], name='') -> dict:
     # 🔍 find only the expert weights
-    res = find_layers(module, layers, name)
+    res = find_modules(module, layers, name)
     for key in list(res.keys()):
         if "gate" in key:
             res.pop(key)
@@ -52,13 +60,18 @@ def find_layers_for_moe(module, layers=[nn.Linear, Expert], name=''):
     return res
 
 
-
-def find_gates_for_moe(module, layers=[nn.Linear], name=''):
+def find_moe_gates(module, layers=[nn.Linear], name='') -> dict:
     # 🔍 find only the gate network
-    res = find_layers(module, layers, name)
+    res = find_modules(module, layers, name)
     for key in list(res.keys()):
         if "gate" not in key:
             res.pop(key)
+    return res
+
+
+def find_moe_experts(module, layers=[MixtralSparseMoeBlock], name='') -> dict:
+    # 🔍 find only the expert blocks
+    res = find_modules(module, layers, name)
     return res
 
 
@@ -72,7 +85,7 @@ def check_sparsity(model):
     total_params = 0
     for i in range(len(layers)):
         layer = layers[i]
-        subset = find_layers(layer)
+        subset = find_modules(layer)
 
         sub_count = 0
         sub_params = 0
@@ -129,13 +142,8 @@ def check_sparsity_from_state_dict(state_dict):
 
 
 @torch.no_grad()
-def prepare_calibration_input(model, dataloader, accelerator: Accelerator, num_samples=16):
-    device = accelerator.device
-    unwrapped_model = accelerator.unwrap_model(model)  # 🔍
-
-    use_cache = unwrapped_model.config.use_cache
-    unwrapped_model.config.use_cache = False
-    layers = unwrapped_model.model.layers
+def prepare_calibration_input(model, dataloader, num_samples=16):
+    layers = model.model.layers
     cache = {'inputs': [], 'attention_mask': [], "position_ids": []}
 
     class Catcher(nn.Module):
@@ -161,6 +169,5 @@ def prepare_calibration_input(model, dataloader, accelerator: Accelerator, num_s
     layers[0] = layers[0].module
 
     outputs = [None] * len(cache['inputs'])
-    unwrapped_model.config.use_cache = use_cache
 
     return cache['inputs'], outputs, cache['attention_mask'], cache['position_ids']

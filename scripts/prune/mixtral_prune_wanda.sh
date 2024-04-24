@@ -69,8 +69,8 @@ echo "Total GPUs: $num_processes"
 #dataset="wikitext"
 #prune_data_type="pt"
 
-# dataset="c4_train"
-dataset="MetaMathQA"
+dataset="c4_train"
+# dataset="MetaMathQA"
 # dataset="codealpaca"
 
 prune_data_type="pt"
@@ -85,6 +85,7 @@ prune_method="wanda"
 sparsity_type="unstructured"
 #sparsity_type="4:8"
 #sparsity_type="2:4"
+sparsity_type="structured"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 #folder_name="debugggggg"

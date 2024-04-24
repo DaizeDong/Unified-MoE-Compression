@@ -71,6 +71,7 @@ def save_sparse_model(prune_model_save_path, model, tokenizer, accelerator: Acce
 def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, update_state_dict):
     # 🔍 save
     accelerator.print("Saving models... (may take minutes)")
+    # accelerator.print(f"update_state_dict: {update_state_dict}")
     if accelerator.is_main_process:
         if not os.path.exists(prune_model_save_path):
             os.makedirs(prune_model_save_path)
@@ -90,9 +91,11 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
             accelerator.print(f"Updating {name} (device = {update_state_dict[name].device})")
             save_state_dict[name] = update_state_dict[name]
 
+
         # 🔍 initialize a new model and save
         accelerator.print("Initializing the new model...")
         unwrapped_model = accelerator.unwrap_model(model)
+        accelerator.print(unwrapped_model.config)
         model_decomposed = type(unwrapped_model)(unwrapped_model.config)
         model_decomposed.load_state_dict(save_state_dict, strict=False)
         model_decomposed.bfloat16()
@@ -106,4 +109,4 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
 
 
 def save_expert_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, update_state_dict):
-    pass
+    save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator, update_state_dict)

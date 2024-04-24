@@ -785,7 +785,9 @@ MIXTRAL_ATTENTION_CLASSES = {
 }
 
 
-class Expert(nn.Linear):
+class ExpertLinear(nn.Linear):
+    """This is for wanda pruning. (forward with scores for hooks to capture)"""
+
     def forward(self, input: torch.Tensor, routing_scores: torch.Tensor) -> torch.Tensor:
         # print(f"input: {input.size()}, weight: {self.weight.size()}")
         return super().forward(input)
@@ -817,9 +819,9 @@ class MixtralBlockSparseTop2MLP(nn.Module):
             # self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
             # self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
             # TODO for wanda pruning
-            self.w1 = Expert(self.hidden_dim, self.ffn_dim, bias=False)  # gate_proj
-            self.w2 = Expert(self.ffn_dim, self.hidden_dim, bias=False)  # down_proj
-            self.w3 = Expert(self.hidden_dim, self.ffn_dim, bias=False)  # up_proj
+            self.w1 = ExpertLinear(self.hidden_dim, self.ffn_dim, bias=False)  # gate_proj
+            self.w2 = ExpertLinear(self.ffn_dim, self.hidden_dim, bias=False)  # down_proj
+            self.w3 = ExpertLinear(self.hidden_dim, self.ffn_dim, bias=False)  # up_proj
 
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -884,12 +886,13 @@ class MixtralSparseMoeBlock(nn.Module):
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
+        # 🔍 the routing scores with temperature for adjusting sparsity
         #####################################
-        # # 🔍 the routing scores with temperature for adjusting sparsity
         routing_weights_sparsity = F.softmax(router_logits / self.temperature, dim=1, dtype=torch.float)
         routing_weights_sparsity, selected_experts = torch.topk(routing_weights_sparsity, self.top_k, dim=-1)
         # routing_weights_sparsity /= routing_weights_sparsity.sum(dim=-1, keepdim=True)
@@ -921,26 +924,32 @@ class MixtralSparseMoeBlock(nn.Module):
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
-            # current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
+
             # 🔍 for pruning with dynamic sparsity
+            #####################################
             routing_scores_sparsity = routing_weights_sparsity[top_x_list, idx_list, None]
             current_hidden_states = expert_layer(current_state, routing_scores_sparsity) * routing_weights[top_x_list, idx_list, None]
+            # current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
+            #####################################
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+
         return final_hidden_states, router_logits
 
 
 class MixtralDecoderLayer(nn.Module):
-    def __init__(self, config: MixtralConfig, layer_idx: int):
+    def __init__(self, config: MixtralConfig, layer_idx: int, mode: str = "static"):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-
         self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_index=layer_idx)
+        if mode == "dynamic":
+            self.block_sparse_moe = DynamicSkippingMixtralSparseMoeBlockWrapper(self.block_sparse_moe)
+
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1654,3 +1663,76 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
+    def __init__(self, model, beta=0.):
+        super().__init__()
+        assert model.top_k == 2
+        self.hidden_dim = model.hidden_dim
+        self.ffn_dim = model.ffn_dim
+        self.num_experts = model.num_experts
+        self.top_k = model.top_k
+        self.gate = model.gate
+        self.experts = model.experts
+
+        self.beta = beta  # 🔍 needs to ensure
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """ """
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states)
+
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+
+        # 🔍 skip the experts with too low scores (batch * sequence_length)
+        mask_top1 = (routing_weights[:, 1] < self.beta * routing_weights[:, 0])
+        routing_weights[mask_top1, 1] = 0
+
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
+
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        # (batch * sequence_length, self.top_k, n_experts)
+        expert_mask = torch.nn.functional.one_hot(
+            selected_experts, num_classes=self.num_experts)
+
+        expert_mask[mask_top1, 1, :] = 0
+        expert_mask = expert_mask.permute(2, 1, 0)
+
+        # Loop over all available experts in the model and perform the computation on each expert
+        for expert_idx in range(self.num_experts):
+            expert_layer = self.experts[expert_idx]
+            top_x, indices = torch.where(expert_mask[expert_idx])
+
+            if indices.shape[0] == 0:
+                continue
+
+            # in torch it is faster to index using lists than torch tensors
+            indices_list = indices.tolist()
+            top_x_list = top_x.tolist()
+
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None,
+            indices_list].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(
+                current_state, routing_weights[indices_list, top_x_list, None])
+
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
+            final_hidden_states.index_add_(
+                0, indices, current_hidden_states.to(hidden_states.dtype))
+        final_hidden_states = final_hidden_states.reshape(
+            batch_size, sequence_length, hidden_dim)
+        return final_hidden_states, router_logits

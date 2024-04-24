@@ -5,8 +5,8 @@ from accelerate import Accelerator
 from tqdm import tqdm
 
 import transformers
-from .utils import find_layers_for_moe, find_gates_for_moe, prepare_calibration_input, print_gpu_memory
-from .wrapper import WandaWrapper, SparseGPTWrapper, GateRemapWrapper
+from .utils import find_moe_expert_linears, prepare_calibration_input, print_gpu_memory
+from .wrapper import WandaWrapper, SparseGPTWrapper
 
 print("transformers", transformers)
 
@@ -28,7 +28,7 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
 
         # Prune
         layer.to(device)  # 🔍
@@ -78,7 +78,7 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
     update_state_dict = {}
 
     accelerator.print("Getting features...")
-    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
+    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
     inputs_for_scores = [input.clone() for input in inputs]
     outputs_for_scores = [None for _ in range(len(outputs))]
 
@@ -95,7 +95,7 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
         experts_subset = [name for name in subset if "experts" in name]
         separate_weights = ["w1", "w2", "w3"]
         w1 = [name for name in experts_subset if "w1" in name] if "w1" in separate_weights else []
@@ -167,7 +167,7 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
 
         #####################################
         separate = True
@@ -385,9 +385,139 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
             #                                                                  * (torch.ones_like(All_mask[ei]) - All_mask[ei])).bfloat16().cpu()
 
         # Update inputs & outputs
-        # for j in range(num_samples):
-        #     outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+        inputs, outputs = outputs, inputs
 
+    accelerator.print("Pruning done!")
+    unwrapped_model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
+
+    # 🔍 return the state dict
+    return update_state_dict
+
+
+@torch.no_grad()
+def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0):
+    """
+    :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
+    """
+    sparsity_type = getattr(args, "sparsity_type", "unstructured")
+    device = accelerator.device
+    unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
+    use_cache = unwrapped_model.config.use_cache
+    unwrapped_model.config.use_cache = False
+    layers = unwrapped_model.model.layers
+
+    # 🔍 store the pruned parameters in CPU
+    update_state_dict = {}
+
+    accelerator.print("Getting features...")
+    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
+
+    accelerator.print('Starting ...')
+    for i in tqdm(range(len(layers)), desc="Pruning layers...", disable=not accelerator.is_main_process):
+        sys.stderr.flush()
+        torch.cuda.empty_cache()
+        print_gpu_memory(accelerator)
+        layer = layers[i]
+        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
+
+        # Wrap layers
+        wrapped_layers = {}
+        for name in subset:
+            wrapped_layers[name] = WandaWrapper(subset[name], layer_name=name, multiply_score=False, p=1)  # 🔍
+
+        # Forward hook for recording row importance
+        def add_batch(name):
+            def hook(_, input, output):
+                wrapped_layers[name].add_batch_no_score(input[0].data, output.data)
+
+            def moe_hook(_, input, output):
+                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data)  # 🔍 input[1] is routing scores.
+
+            if 'experts' in name:
+                return moe_hook
+            else:
+                return hook
+
+            # accelerator.print(f'subset: {subset}')
+
+        # Get importance
+        handles = []
+        for name in wrapped_layers:
+            handles.append(subset[name].register_forward_hook(add_batch(name)))
+        for j in range(num_samples):
+            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+        for h in handles:
+            h.remove()
+
+        # 🔍 Prune
+        for name in subset: # 🔍semi-structured
+            module_state_dict_name = f"model.layers.{i}.{name}"
+            accelerator.print(f"Pruning module {module_state_dict_name}")
+            W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
+            W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
+            W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
+
+            if prune_n != 0:
+                # structured n:m sparsity
+                for ii in range(W_metric.shape[1]):
+                    if ii % prune_m == 0:
+                        tmp = W_metric[:, ii:(ii + prune_m)].float()
+                        W_mask.scatter_(1, ii + torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
+            elif sparsity_type == "structured": # 🔍structured pruning, but may be applied to another dimention. 
+                # for ii in range(W_metric.shape[1]):
+                    # if ii % prune_m == 0:
+                if "w2" in name: 
+                    # prune_m = W_metric.size()[-1]
+                    # prune_n = prune_m * args.sparsity_ratio
+                    # tmp = W_metric[:, :prune_m].float()
+                    # W_mask.scatter_(1, torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
+        
+                    prune_m = W_metric.size()[0]
+                    prune_n = prune_m * args.sparsity_ratio
+                    tmp = W_metric[:prune_m, :].float()
+                    W_mask.scatter_(0, torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
+        
+            else:       # 🔍unstructured
+                sort_res = torch.sort(W_metric, dim=-1, stable=True)
+
+                if args.use_variant: 
+                    # wanda variant
+                    def return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before):
+                        thres_cumsum = sum_before * alpha
+                        sort_mask = tmp_metric <= thres_cumsum.reshape((-1, 1))
+                        thres = torch.gather(sort_res[0], dim=1, index=sort_mask.sum(dim=1, keepdims=True) - 1)
+                        W_mask = (W_metric <= thres)
+                        cur_sparsity = (W_mask == True).sum() / W_mask.numel()
+                        return W_mask, cur_sparsity
+
+                    tmp_metric = torch.cumsum(sort_res[0], dim=1)
+                    sum_before = W_metric.sum(dim=1)
+
+                    alpha = 0.4
+                    alpha_hist = [0., 0.8]
+                    W_mask, cur_sparsity = return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before)
+                    while (torch.abs(cur_sparsity - args.sparsity_ratio) > 0.001) and (alpha_hist[1] - alpha_hist[0] >= 0.001):
+                        if cur_sparsity > args.sparsity_ratio:
+                            alpha_new = (alpha + alpha_hist[0]) / 2.0
+                            alpha_hist[1] = alpha
+                        else:
+                            alpha_new = (alpha + alpha_hist[1]) / 2.0
+                            alpha_hist[0] = alpha
+
+                        alpha = alpha_new
+                        W_mask, cur_sparsity = return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before)
+                    accelerator.print(f"Alpha found {alpha} sparsity {cur_sparsity:.6f}")
+                else:
+                    # unstructured pruning
+                    indices = sort_res[1][:, :int(W_metric.shape[1] * args.sparsity_ratio)]
+                    W_mask.scatter_(1, indices, True)
+
+            # 🔍 update the state dict
+            # 🔍 the weights would not change if directly updating them using "subset[name].weight.data[W_mask] = 0"
+            update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight * (torch.ones_like(W_mask) - W_mask)).bfloat16().cpu()
+
+        # Update inputs & outputs
         inputs, outputs = outputs, inputs
 
     accelerator.print("Pruning done!")
@@ -414,7 +544,7 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
     update_state_dict = {}
 
     accelerator.print("Getting features...")
-    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
+    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
 
     accelerator.print('Starting ...')
     for i in tqdm(range(len(layers)), desc="Pruning layers...", disable=not accelerator.is_main_process):
@@ -422,7 +552,7 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
 
         # Wrap layers
         gpts = {}
@@ -529,134 +659,6 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
             # subset[name].weight.data = W.reshape(subset[name].weight.shape).to(subset[name].weight.data.dtype)
 
         # Update inputs & outputs
-        for j in range(num_samples):
-            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
-        inputs, outputs = outputs, inputs
-
-    accelerator.print("Pruning done!")
-    unwrapped_model.config.use_cache = use_cache
-    torch.cuda.empty_cache()
-
-    # 🔍 return the state dict
-    return update_state_dict
-
-
-# @torch.no_grad()
-def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0):
-    """
-    :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
-    """
-    device = accelerator.device
-    unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
-    use_cache = unwrapped_model.config.use_cache
-    unwrapped_model.config.use_cache = False
-    layers = unwrapped_model.model.layers
-
-    # 🔍 store the pruned parameters in CPU
-    update_state_dict = {}
-
-    accelerator.print("Getting features...")
-    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
-
-    accelerator.print('Starting ...')
-
-    # 🔍 TODO Prune
-    for i in tqdm(range(len(layers)), desc="Pruning layers...", disable=not accelerator.is_main_process):
-        sys.stderr.flush()
-        torch.cuda.empty_cache()
-        print_gpu_memory(accelerator)
-        layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
-        #####################################
-        pre_defined_sparsity = True
-        # pre_defined_sparsity = False  # 是否只借助score，为每个专家分配固定的稀疏率。如果为否，则按照之前的实现，对合并后的"All_experts_metric"进行sort
-        # #####################################
-        # Wrap layers
-        wrapped_layers = {}
-        for name in subset:
-            wrapped_layers[name] = WandaWrapper(subset[name], layer_name=name, multiply_score=not pre_defined_sparsity, p=1)  # 🔍
-
-        # Forward hook for recording row importance
-        def add_batch(name):
-            def hook(_, input, output):
-                wrapped_layers[name].add_batch(input[0].data, output.data)
-
-            def moe_hook(_, input, output):
-                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data)  # 🔍 input[1] is routing scores.
-
-            if 'experts' in name:
-                return moe_hook
-            else:
-                return hook
-
-            # accelerator.print(f'subset: {subset}')
-
-        # Get importance
-        handles = []
-        for name in wrapped_layers:
-            handles.append(subset[name].register_forward_hook(add_batch(name)))
-        for j in range(num_samples):
-            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
-        for h in handles:
-            h.remove()
-
-        # 🔍 Prune
-        for name in subset:
-            module_state_dict_name = f"model.layers.{i}.{name}"
-            accelerator.print(f"Pruning module {module_state_dict_name}")
-            W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
-            W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
-            W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
-
-            if prune_n != 0:
-                # structured n:m sparsity
-                for ii in range(W_metric.shape[1]):
-                    if ii % prune_m == 0:
-                        tmp = W_metric[:, ii:(ii + prune_m)].float()
-                        W_mask.scatter_(1, ii + torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
-            else:
-                sort_res = torch.sort(W_metric, dim=-1, stable=True)
-
-                if args.use_variant:
-                    # wanda variant
-                    def return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before):
-                        thres_cumsum = sum_before * alpha
-                        sort_mask = tmp_metric <= thres_cumsum.reshape((-1, 1))
-                        thres = torch.gather(sort_res[0], dim=1, index=sort_mask.sum(dim=1, keepdims=True) - 1)
-                        W_mask = (W_metric <= thres)
-                        cur_sparsity = (W_mask == True).sum() / W_mask.numel()
-                        return W_mask, cur_sparsity
-
-                    tmp_metric = torch.cumsum(sort_res[0], dim=1)
-                    sum_before = W_metric.sum(dim=1)
-
-                    alpha = 0.4
-                    alpha_hist = [0., 0.8]
-                    W_mask, cur_sparsity = return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before)
-                    while (torch.abs(cur_sparsity - args.sparsity_ratio) > 0.001) and (alpha_hist[1] - alpha_hist[0] >= 0.001):
-                        if cur_sparsity > args.sparsity_ratio:
-                            alpha_new = (alpha + alpha_hist[0]) / 2.0
-                            alpha_hist[1] = alpha
-                        else:
-                            alpha_new = (alpha + alpha_hist[1]) / 2.0
-                            alpha_hist[0] = alpha
-
-                        alpha = alpha_new
-                        W_mask, cur_sparsity = return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before)
-                    accelerator.print(f"Alpha found {alpha} sparsity {cur_sparsity:.6f}")
-                else:
-                    # unstructured pruning
-                    indices = sort_res[1][:, :int(W_metric.shape[1] * args.sparsity_ratio)]
-                    W_mask.scatter_(1, indices, True)
-
-            # 🔍 update the state dict
-            # 🔍 the weights would not change if directly updating them using "subset[name].weight.data[W_mask] = 0"
-            update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight * (torch.ones_like(W_mask) - W_mask)).bfloat16().cpu()
-
-        # Update inputs & outputs
-        for j in range(num_samples):
-            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
-
         inputs, outputs = outputs, inputs
 
     accelerator.print("Pruning done!")
@@ -682,7 +684,7 @@ def prune_template(args, model, dataloader, accelerator: Accelerator, num_sample
     update_state_dict = {}
 
     accelerator.print("Getting features...")
-    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
+    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
 
     accelerator.print('Starting ...')
     for i in tqdm(range(len(layers)), desc="Pruning layers...", disable=not accelerator.is_main_process):
@@ -690,7 +692,7 @@ def prune_template(args, model, dataloader, accelerator: Accelerator, num_sample
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
 
         # Wrap layers
         wrapped_layers = {}
@@ -729,128 +731,6 @@ def prune_template(args, model, dataloader, accelerator: Accelerator, num_sample
 
     accelerator.print("Pruning done!")
     unwrapped_model.config.use_cache = use_cache
-    torch.cuda.empty_cache()
-
-    # 🔍 return the state dict
-    return update_state_dict
-
-
-@torch.no_grad()
-def gate_remap(model, model_pruned, dataloader, accelerator: Accelerator, num_samples):
-    """
-    Remap the gate network to refine expert selection.
-    $W = (X^T @ X)^{-1} @ X^T @ Y = X^{-1} @ Y$ (Moore-Penrose pseudo-inverse)
-    """
-    unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
-    unwrapped_model.config.use_cache = False
-    layers = unwrapped_model.model.layers
-
-    unwrapped_model_pruned = accelerator.unwrap_model(model_pruned)  # 🔍 unwrap model first
-    unwrapped_model_pruned.config.use_cache = False
-    layers_pruned = unwrapped_model_pruned.model.layers
-
-    # 🔍 store the parameters in CPU
-    update_state_dict = {}
-
-    accelerator.print("Getting features...")
-    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, accelerator, num_samples)  # 🔍
-    inputs_pruned, outputs_pruned, attention_mask_pruned, position_ids_pruned = prepare_calibration_input(model_pruned, dataloader, accelerator, num_samples)  # 🔍
-
-    accelerator.print('Starting ...')
-    for i in tqdm(range(len(layers)), desc="Remapping gates...", disable=not accelerator.is_main_process):
-        sys.stderr.flush()
-        torch.cuda.empty_cache()
-        print_gpu_memory(accelerator)
-        layer = layers[i]
-        layer_pruned = layers_pruned[i]
-
-        subset = find_gates_for_moe(layer)  # 🔍 Find gates for remapping
-        subset_pruned = find_gates_for_moe(layer_pruned)  # 🔍 Find gates for remapping
-
-        accelerator.print("subset", subset)
-        accelerator.print("subset_pruned", subset_pruned)
-
-        # Wrap layers
-        subsets = {}
-        subsets_pruned = {}
-        for name in subset:
-            subsets[name] = GateRemapWrapper(subset[name], record_input=True, record_output=True)
-            subsets_pruned[name] = GateRemapWrapper(subset_pruned[name], record_input=True, record_output=True)
-
-        def add_batch(name, is_pruned):
-            def hidden_states_hook(_, input, output):
-                subsets[name].add_batch(input[0].data, output.data)
-
-            def hidden_states_pruned_hook(_, input, output):
-                subsets_pruned[name].add_batch(input[0].data, output.data)
-
-            if not is_pruned:
-                return hidden_states_hook
-            else:
-                return hidden_states_pruned_hook
-
-        # Add Hooks
-        handles = []
-        for name in subset:
-            handles.append(subset[name].register_forward_hook(add_batch(name, is_pruned=False)))
-            handles.append(subset_pruned[name].register_forward_hook(add_batch(name, is_pruned=True)))
-        for j in range(num_samples):
-            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
-            outputs_pruned[j] = layer_pruned(inputs_pruned[j], attention_mask=attention_mask_pruned[j], position_ids=position_ids_pruned[j])[0]
-        for h in handles:
-            h.remove()
-
-        # 🔍 remap the gates
-        if i > 0:  # we skip layer 0 whose inputs are intact
-            for name in subset:
-                module_state_dict_name = f"model.layers.{i}.{name.replace('._fsdp_wrapped_module', '')}"  # 🔍
-                accelerator.print(f"Aggregating {module_state_dict_name}")
-
-                # aggregate sample hidden states
-                original_dense_gate_outputs = torch.cat(subsets[name].outputs, dim=0)  # (total_token_num, num_experts)
-                sparse_gate_inputs = torch.cat(subsets_pruned[name].inputs, dim=0)  # (total_token_num, hidden_dim)
-                sparse_gate_outputs = torch.cat(subsets_pruned[name].outputs, dim=0)  # (total_token_num, num_experts)
-
-                total_token_num_each_device = original_dense_gate_outputs.shape[0]
-
-                if total_token_num_each_device * accelerator.num_processes <= 128 * 2048:  # can handle it with 80G GPU memory
-                    # use gathered hidden_states ro calculate the inverse
-                    original_dense_gate_outputs = accelerator.gather(original_dense_gate_outputs)  # 🔍 all gather across devices
-                    accelerator.print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
-                    sparse_gate_outputs = accelerator.gather(sparse_gate_outputs)  # 🔍 all gather across devices
-                    accelerator.print(f"Former Relative L2 Loss: {torch.pow(sparse_gate_outputs - original_dense_gate_outputs, exponent=2).mean()}")
-
-                    sparse_gate_outputs.cpu()
-                    torch.cuda.empty_cache()
-
-                    sparse_gate_inputs = accelerator.gather(sparse_gate_inputs)  # 🔍 all gather across devices
-                    remapped_weights = torch.linalg.lstsq(sparse_gate_inputs, original_dense_gate_outputs).solution
-                    # remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
-                    accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
-                else:
-                    # calculate the inverse on each device, and then average the remapped_weights over devices
-                    accelerator.print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
-                    accelerator.print(f"Former Relative L2 Loss: {torch.pow(sparse_gate_outputs - original_dense_gate_outputs, exponent=2).mean()}")
-
-                    sparse_gate_outputs.cpu()
-                    torch.cuda.empty_cache()
-
-                    remapped_weights = torch.linalg.lstsq(sparse_gate_inputs, original_dense_gate_outputs).solution
-                    accelerator.print("remapped_weights", remapped_weights)
-                    # remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
-                    remapped_weights = accelerator.reduce(remapped_weights, reduction="mean")  # 🔍 all reduce across devices
-                    # HERE IS WHERE THE ERROR OCCURS
-                    accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
-
-                # 🔍 update the state dict
-                # 🔍 the weights would not change if directly applying them
-                update_state_dict[module_state_dict_name + ".weight"] = remapped_weights.t().bfloat16().cpu()
-
-        # Update inputs & outputs
-        inputs, outputs = outputs, inputs
-        inputs_pruned, outputs_pruned = outputs_pruned, inputs_pruned
-
-    accelerator.print("Remapping done!")
     torch.cuda.empty_cache()
 
     # 🔍 return the state dict

@@ -1,69 +1,290 @@
 import logging
 import numpy as np
+import sys
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
 from argparse import Namespace
-from copy import deepcopy
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM
-from .wrapper import PrunableMixtralSparseMoeBlockWrapper
+from .utils import find_moe_experts, print_gpu_memory, prepare_calibration_input, find_moe_expert_linears_and_gate
+from .wrapper import PrunableMixtralSparseMoeBlockWrapper, WeightRecordWrapper
 
 logger = logging.getLogger(__name__)
 
 
+# @torch.no_grad()
+# def layerwise_pruning(args, model, calib_loader, accelerator: Accelerator, num_samples: int):
+#     accelerator.print(f"model: {type(model)}")
+
+#     device = accelerator.device
+#     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
+#     use_cache = unwrapped_model.config.use_cache
+#     unwrapped_model.config.use_cache = False
+#     layers = unwrapped_model.model.layers
+
+#     # 🔍 store the pruned parameters in CPU
+#     update_state_dict = {}
+
+#     for i, batch in enumerate(tqdm(calib_loader, desc='Model forwarding on sample set...', disable=not accelerator.is_main_process)):
+#         if i > num_samples:
+#             break
+#         accelerator.print(f"batch: {batch.keys()} {batch}")
+#         model_inputs = model.prepare_inputs_for_generation(**batch)
+#         accelerator.print(f"model_inputs: {model_inputs.keys()} {model_inputs}")
+#         # outputs = 
+#         model(**model_inputs)
+#         # assert outputs is not None
+
+#     torch.cuda.empty_cache()
+
+#     # Find the optimal expert combination
+#     global_loss_history = dict()
+#     for l, layer in tqdm(list(enumerate(layers)), desc='Enumerating loss on sample set...', disable=not accelerator.is_main_process):
+#         with FSDP.summon_full_params(model):  # 🔍
+#             layer.to(device)
+#             accelerator.print(layer)
+#             moe_module = layer.block_sparse_moe
+#             if not hasattr(moe_module, 'cache_space'):
+#                 continue
+
+#             # Get the L2 loss on outputs for every possible combination of expert drop
+#             # loss_history: dict = moe_module.enumerate()
+#             # for key, value in loss_history.items():  # 🔍 all reduce across devices
+#             #     loss_history[key] = accelerator.reduce(value, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+
+#             # Get the optimal expert drop combination
+#             # moe_module.update_dropped_experts(loss_history)
+#             # global_loss_history[l] = loss_history
+
+#             # Update the state_dict
+#             moe_module.prune(update_state_dict, layer_id=l)
+#             torch.cuda.empty_cache()
+#     accelerator.print(global_loss_history)
+
+#     return update_state_dict
+
+# @torch.no_grad()
+# def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, model_intact, calib_loader: DataLoader,
+#                       accelerator: Accelerator, num_samples: int, num_local_experts: int):
+#     # device = accelerator.device
+#     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
+#     unwrapped_model.config.use_cache = False
+#     layers = unwrapped_model.model.layers
+#
+#     # 🔍 store the pruned parameters in CPU
+#     update_state_dict = {}
+#
+#     # Wrap layers
+#     for layer_id, layer in enumerate(layers):
+#         subset = find_moe_experts(layer)  # MixtralSparseMoeBlock
+#         # accelerator.print(subset)
+#         for name, module in subset.items():  # set all modules in the model as wrapped_modules
+#             wrapped_module = PrunableMixtralSparseMoeBlockWrapper(module, r=args.r)
+#             wrapped_module.cache_X = True
+#             wrapped_module.cache_Z = True
+#             setattr(layer, name, wrapped_module)
+#
+#     # Forward to record scores
+#     for i, batch in tqdm(enumerate(calib_loader), desc='Model forwarding on sample set...'):
+#         if i > num_samples:
+#             break
+#         model_inputs = model.prepare_inputs_for_generation(**batch)
+#         model(**model_inputs)
+#
+#     print_gpu_memory(accelerator)
+#     torch.cuda.empty_cache()
+#
+#     # Expert Drop
+#     for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping Experts...'):
+#         # module_state_dict_name = f"model.layers.{l}.block_sparse_moe"
+#         wrapped_module = layer.block_sparse_moe
+#
+#         if hasattr(wrapped_module, 'cache_space'):
+#             # 🔍 [IMPORTANT] all reduce across devices
+#             wrapped_module.cache_space.scores = accelerator.reduce(wrapped_module.cache_space.scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+#             wrapped_module.enumerate()
+#             update_state_dict = wrapped_module.prune(update_state_dict, model_intact, layer_id)
+#
+#         layer.block_sparse_moe = wrapped_module.layer
+#         accelerator.print(f"layer {layer_id}: {layer.block_sparse_moe}")
+#
+#     accelerator.print(update_state_dict)
+#
+#     return update_state_dict
+
+
+# 🔍 The final attempt that strictly follows the pruning pipeline
 @torch.no_grad()
-def layerwise_pruning(args, model, calib_loader, accelerator: Accelerator, num_samples: int):
-    accelerator.print(f"model: {type(model)}")
+def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int, num_local_experts: int):
+    """
+    :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
+    """
+    # Finally, the whole shit has been done. THANK GOD!!!!!!!!!!!!!!!!!!!!!
 
     device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     use_cache = unwrapped_model.config.use_cache
+    unwrapped_model.config.use_cache = False
+    num_local_experts = unwrapped_model.config.num_local_experts
+    layers = unwrapped_model.model.layers
+
+    # 🔍 store the pruned parameters in CPU
+    update_state_dict = {}
+
+    accelerator.print("Getting features...")
+    inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
+
+    accelerator.print('Starting ...')
+    for i in tqdm(range(len(layers)), desc="Dropping layers...", disable=not accelerator.is_main_process):
+        sys.stderr.flush()
+        torch.cuda.empty_cache()
+        print_gpu_memory(accelerator)
+        layer = layers[i]
+        subset = find_moe_experts(layer)  # 🔍 Find MixtralSparseMoeBlock
+        captured_weights_subset = find_moe_expert_linears_and_gate(layer)  # 👆 Find weights to capture (here the gate & w1 & w2 & w3)
+        # accelerator.print(subset)
+        # accelerator.print(captured_weights_subset)
+
+        # Wrap MixtralSparseMoeBlock
+        wrapped_layers = {}
+        for name in subset:
+            wrapped_layers[name] = PrunableMixtralSparseMoeBlockWrapper(subset[name])  # 🔍
+
+        # 👆 Wrap weights to record during forward
+        # (WHY: DeepSpeed will temporarily collect intact weights to GPU during forward, so we can capture them using forward hooks)
+        captured_weights_wrapped_layers = {}
+        for name in captured_weights_subset:
+            captured_weights_wrapped_layers[name] = WeightRecordWrapper(captured_weights_subset[name], layer_name=name)
+
+        # Forward hook for recording metrics
+        def add_batch(name):
+            def hook(_, input, output):
+                wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
+
+            return hook
+
+        def record_weight(name):  # 👆
+            def hook(_, input, output):
+                captured_weights_wrapped_layers[name].record(input, output)
+
+            return hook
+
+        # Get importance
+        handles = []
+        for name in wrapped_layers:
+            handles.append(subset[name].register_forward_hook(add_batch(name)))
+        for name in captured_weights_wrapped_layers:  # 👆
+            handles.append(captured_weights_subset[name].register_forward_hook(record_weight(name)))
+        for j in range(num_samples):
+            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+        for h in handles:
+            h.remove()
+
+        # 🔍 Expert Drop
+        for name in subset:
+            module_state_dict_name = f"model.layers.{i}.{name}"
+            accelerator.print(f"Dropping for {module_state_dict_name}")
+
+            # 🔍 sort total scores
+            # [IMPORTANT] all reduce across devices
+            scores = wrapped_layers[name].scores
+            scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+
+            _, experts_to_drop = torch.topk(scores, num_local_experts - args.r, largest=False)
+            experts_to_drop = experts_to_drop.tolist()
+            experts_to_preserve = sorted(list(set(range(num_local_experts)) - set(experts_to_drop)))
+            accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
+
+            # 🔍 update the state dict
+            # 👆 get weights from the "captured_weights_wrapped_layers"
+            update_state_dict[f"{module_state_dict_name}.gate.weight"] = captured_weights_wrapped_layers[f"{name}.gate"].weight[list(experts_to_preserve)]
+            for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
+                update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w1"].weight
+                update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w2"].weight
+                update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w3"].weight
+
+            # update_state_dict[f"{module_state_dict_name}.gate.weight"] = wrapped_layers[name].gate[list(experts_to_preserve)].clone().bfloat16().cpu()
+            # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
+            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = wrapped_layers[name].w1.clone().bfloat16().cpu()
+            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = wrapped_layers[name].w2.clone().bfloat16().cpu()
+            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = wrapped_layers[name].w3.clone().bfloat16().cpu()
+
+        # Update inputs & outputs
+        inputs, outputs = outputs, inputs
+
+    accelerator.print("Expert dropping done!")
+    unwrapped_model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
+
+    for name, weight in update_state_dict.items():
+        accelerator.print(name, weight.shape)
+
+    # 🔍 return the state dict
+    return update_state_dict
+
+
+@torch.no_grad()
+def global_pruning(args: Namespace, model: MixtralForCausalLM, calib_loader: DataLoader,
+                   accelerator: Accelerator, num_samples: int, num_local_experts: int):
+    # device = accelerator.device
+    unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
 
     # 🔍 store the pruned parameters in CPU
     update_state_dict = {}
 
-    for i, batch in enumerate(tqdm(calib_loader, desc='Model forwarding on sample set...'), disable=not accelerator.is_main_process):
+    # Wrap layers
+    for layer_id, layer in enumerate(layers):
+        subset = find_moe_experts(layer)  # MixtralSparseMoeBlock
+        # accelerator.print(subset)
+        for name, module in subset.items():  # set all modules in the model as wrapped_modules
+            wrapped_module = PrunableMixtralSparseMoeBlockWrapper(module, r=args.r)
+            wrapped_module.cache_X = True
+            wrapped_module.cache_Z = True
+            setattr(layer, name, wrapped_module)
+
+    # Forward to record scores
+    for i, batch in tqdm(enumerate(calib_loader), desc='Model forwarding on sample set...'):
         if i > num_samples:
             break
-        accelerator.print(f"batch: {batch.keys()} {batch}")
         model_inputs = model.prepare_inputs_for_generation(**batch)
-        accelerator.print(f"model_inputs: {model_inputs.keys()} {model_inputs}")
-        outputs = model(**model_inputs)
-        assert outputs is not None
+        model(**model_inputs)
 
+    print_gpu_memory(accelerator)
     torch.cuda.empty_cache()
 
-    # Find the optimal expert combination
-    global_loss_history = dict()
-    for l, layer in tqdm(list(enumerate(layers)), desc='Enumerating loss on sample set...', disable=not accelerator.is_main_process):
-        moe_module = layer.block_sparse_moe
-        if not hasattr(moe_module, 'cache_space'):
-            continue
+    # Expert Drop
+    global_scores = None
+    for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping Experts...'):
+        # module_state_dict_name = f"model.layers.{l}.block_sparse_moe"
+        wrapped_module = layer.block_sparse_moe
 
-        # Get the L2 loss on outputs for every possible combination of expert drop
-        loss_history: dict = moe_module.enumerate()
-        for key, value in loss_history.items():  # 🔍 all reduce across devices
-            loss_history[key] = accelerator.reduce(value, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+        if hasattr(wrapped_module, 'cache_space'):
+            # 🔍 [IMPORTANT] all reduce across devices
+            wrapped_module.cache_space.scores = accelerator.reduce(wrapped_module.cache_space.scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+            # wrapped_module.enumerate()
+            # update_state_dict = wrapped_module.prune(update_state_dict, layer_id)
 
-        # Get the optimal expert drop combination
-        moe_module.update_dropped_experts(loss_history)
-        global_loss_history[l] = loss_history
+        # layer.block_sparse_moe = wrapped_module.layer
+        # accelerator.print(f"layer {layer_id}: {layer.block_sparse_moe}")
+        global_scores = torch.cat((global_scores, wrapped_module.cache_space.scores), dim=0)  # 🔍 gather the scores.
 
-        # Update the state_dict
-        moe_module.prune(update_state_dict, layer_id=l)
-        torch.cuda.empty_cache()
-    accelerator.print(global_loss_history)
+    experts_to_drop = torch.topk(global_scores, args.r * len(layers))
+    experts_to_drop = experts_to_drop.to("cpu")
+    experts_to_drop = list(int(i) for i in experts_to_drop.data)
+    for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping Experts...'):
+        wrapped_module = layer.block_sparse_moe
+        # 🔍 select the experts for each layer. 
+        wrapped_module.experts_to_drop = [i for i in experts_to_drop if i >= layer_id * num_local_experts and i < (layer_id + 1) * num_local_experts]
+        update_state_dict = wrapped_module.prune(update_state_dict, layer_id)
+        layer.block_sparse_moe = wrapped_module.layer
 
-    # 🔍 change the config
-    update_config = deepcopy(unwrapped_model.config)
-    update_config.num_local_experts = args.r
-
-    return update_config, update_state_dict
+    accelerator.print(update_state_dict)
+    return update_state_dict
 
 
 @torch.no_grad()
@@ -115,9 +336,7 @@ def progressive_pruning(model: MixtralForCausalLM, calib_loader: DataLoader, arg
 
     # Prune & save
     model.num_experts = args.r
-    model.config.num_local_experts = args.r
-
-    return model, (global_loss_history,)
+    # model.config.num_local_experts = args.r
 
 
 @torch.no_grad()
@@ -170,10 +389,3 @@ def dynamic_skipping(model: MixtralForCausalLM, calib_loader: DataLoader, args: 
 
     model.config.betas = res_median
     return model, (res_median, res_mean)
-
-
-Expert_Drop_Methods = {
-    'layerwise_pruning': layerwise_pruning,
-    'progressive_pruning': progressive_pruning,
-    'dynamic_skipping': dynamic_skipping,
-}

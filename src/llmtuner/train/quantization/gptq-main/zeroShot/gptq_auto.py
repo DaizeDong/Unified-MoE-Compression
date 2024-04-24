@@ -200,7 +200,22 @@ def main():
             inject_fused_attention=False,
             trust_remote_code=args.trust_remote_code
         )
+    # args.trust_remote_code = True
+    # print(f"pretrained: {args.quantized_model_dir}, trust_remote_code: {args.trust_remote_code}, use_triton: {args.use_triton}")
 
+    # print(args.quantized_model_dir)
+    # model = AutoGPTQForCausalLM.from_quantized(
+    #     args.quantized_model_dir,
+    #     # device="cuda:0",
+    #     use_triton=args.use_triton,
+    #     # max_memory=max_memory,
+    #     inject_fused_mlp=True,
+    #     inject_fused_attention=False,
+    #     # trust_remote_code=True, 
+    #     trust_remote_code=args.trust_remote_code,
+    # )
+    
+    print(f"model: {model}")
     pipeline_init_kwargs = {"model": model, "tokenizer": tokenizer}
     # if not max_memory:
     #     pipeline_init_kwargs["device"] = "cuda:0"

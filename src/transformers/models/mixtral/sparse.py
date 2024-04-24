@@ -85,3 +85,71 @@ class LoSparseLinear(nn.Module):
     def prune_sparse(self):
         self.nonzero_idx = torch.nonzero(self.sparse.weight.sum(dim=1)).flatten()
         self.sparse_weight_pruned = nn.Parameter(self.sparse.weight[self.nonzero_idx, :])
+
+# For expert drop
+# class CacheDataset(Dataset):
+#     def __init__(self):
+#         # self.alphas = []
+#         # self.Xs = []
+#         # self.Zs = []
+#         self.scores = None
+#         self.prepared = False
+#         self.n_samples = 0
+#
+#     def __len__(self):
+#         if not self.prepared:
+#             self.prepare_for_loader()
+#         return len(self.alphas)
+#
+#     def __getitem__(self, index):
+#         if not self.prepared:
+#             self.prepare_for_loader()
+#         if isinstance(index, list):
+#             return [(self.alphas[idx], self.Xs[idx], self.Zs[idx]) for idx in index]
+#         elif isinstance(index, int):
+#             return self.alphas[index], self.Xs[index], self.Zs[index]
+#
+#     def append(self, alpha=None, X=None, Z=None):
+#         if alpha is not None:
+#             self.alphas.append(alpha.detach().to('cpu', non_blocking=True))
+#         if X is not None:
+#             self.Xs.append(X.detach().to('cpu', non_blocking=True))
+#         if Z is not None:
+#             self.Zs.append(Z.detach().to('cpu', non_blocking=True))
+#         self.prepared = False
+#
+#     def update(self, scores=None):
+#         # scores: shape(seq_len, hidden_size)
+#
+#         warnings.warn("Here the scores shape like (seq_len, hidden_size). Dividing the final scores by \"batch_size\" will introduce "
+#                       "biases when the \"seq_len\" are different across samples (e.g. using \"sft\" type datasets).")
+#         # TODO: do not divide the batch_size.
+#
+#         tmp = scores.size()[0]
+#
+#         if self.scores is None:
+#             self.n_samples += tmp
+#             self.scores = scores.float().sum(0) / self.n_samples
+#         else:
+#             self.scores *= self.n_samples / (self.n_samples + tmp)
+#             self.n_samples += tmp
+#             self.scores += torch.sum(scores, dim=0).float() / self.n_samples
+#
+#         # if alpha is not None:
+#         #     self.alphas.append(alpha.detach().to('cpu', non_blocking=True))
+#         # if X is not None:
+#         #     self.Xs.append(X.detach().to('cpu', non_blocking=True))
+#         # if Z is not None:
+#         #     self.Zs.append(Z.detach().to('cpu', non_blocking=True))
+#         # self.scores.append(scores.detach().to('cpu', non_blocking=True))
+#
+#         self.prepared = False
+#
+#     def prepare_for_loader(self):
+#         if self.prepared:
+#             return
+#         self.prepared = True
+#         self.alphas = torch.concat(self.alphas)
+#         self.Xs = torch.concat(self.Xs)
+#         self.Zs = torch.concat(self.Zs)
+#         assert len(self.Xs) == len(self.Zs)

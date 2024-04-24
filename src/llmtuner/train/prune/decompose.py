@@ -8,7 +8,7 @@ from tqdm import tqdm
 from typing import Optional
 
 from llmtuner.train.prune.permute import get_permuted_state_dict_mixtral
-from llmtuner.train.prune.utils import print_gpu_memory, find_layers_for_moe
+from llmtuner.train.prune.utils import print_gpu_memory, find_moe_expert_linears
 
 
 def svd(weight: torch.Tensor):
@@ -36,7 +36,7 @@ def low_rank_decomposition(
         s_=None,
         v_=None,
         reduced_rank=None,
-        accelerator=None, 
+        accelerator=None,
 ):
     """
     Parameters
@@ -69,9 +69,9 @@ def low_rank_decomposition(
         else:
             reduced_rank = math.ceil(rank * rank_ratio)
 
-    if accelerator is not None: 
+    if accelerator is not None:
         accelerator.print(f"nonzero rank: {rank}")
-        
+
     if remove_criteria == 'max_eigenvalue':
         l_ = u_ @ (torch.sqrt(torch.diag(s_)[:, 0:reduced_rank]))
         r_ = torch.sqrt(torch.diag(s_)[0:reduced_rank, :]) @ v_
@@ -126,13 +126,13 @@ def _substitute_single_linear_weight(
         # Decompose a matrix by SVD
         if sparse_weight is None:
             weight_tensor = module.weight.data.to(device)  # 🔍 here to device
-            output = low_rank_decomposition(weight_tensor, parameter_ratio=parameter_ratio, return_dict=True, 
+            output = low_rank_decomposition(weight_tensor, parameter_ratio=parameter_ratio, return_dict=True,
                                             accelerator=accelerator, **kwargs)
             l_, r_, reduced_rank = output['L'], output['R'], output['reduced_rank']
             s_ = weight_tensor - torch.mm(l_, r_)
         else:
             weight_tensor = module.weight.data.to(device) - sparse_weight  # 🔍 here to device
-            output = low_rank_decomposition(weight_tensor, parameter_ratio=parameter_ratio, return_dict=True, 
+            output = low_rank_decomposition(weight_tensor, parameter_ratio=parameter_ratio, return_dict=True,
                                             accelerator=accelerator, **kwargs)
             l_, r_, reduced_rank = output['L'], output['R'], output['reduced_rank']
             s_ = sparse_weight
@@ -222,14 +222,14 @@ def _substitute_layer_linear_weight(
             if sparse_weight is None:
                 weight_tensor = module.weight.data.to(device)
                 output = low_rank_decomposition(weight_tensor, parameter_ratio=parameter_ratio, return_dict=True,
-                                                u_=u_list[i], s_=s_list[i], v_=v_list[i], reduced_rank=reduced_ranks[i], 
+                                                u_=u_list[i], s_=s_list[i], v_=v_list[i], reduced_rank=reduced_ranks[i],
                                                 accelerator=accelerator, **kwargs)
                 l_, r_, reduced_rank = output['L'], output['R'], output['reduced_rank']
                 s_ = weight_tensor - torch.mm(l_, r_)
             else:
                 weight_tensor = module.weight.data.to(device) - sparse_weight
                 output = low_rank_decomposition(weight_tensor, parameter_ratio=parameter_ratio, return_dict=True,
-                                                u_=u_list[i], s_=s_list[i], v_=v_list[i], reduced_rank=reduced_ranks[i], 
+                                                u_=u_list[i], s_=s_list[i], v_=v_list[i], reduced_rank=reduced_ranks[i],
                                                 accelerator=accelerator, **kwargs)
                 l_, r_, reduced_rank = output['L'], output['R'], output['reduced_rank']
                 s_ = sparse_weight
@@ -248,12 +248,19 @@ def _substitute_layer_linear_weight(
 
 
 @torch.no_grad()
-def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_sparse=True, do_permute=True, use_svd=True):
+def decompose_moe(args, model, accelerator: Accelerator):
     device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     use_cache = unwrapped_model.config.use_cache
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
+
+    # Get configs
+    parameter_ratio = 1.0 - args.sparsity_ratio
+    level = args.level
+    has_sparse = args.has_sparse
+    do_permute = args.do_permute
+    use_svd = args.use_svd
 
     # 🔍 store the pruned parameters in CPU
     update_state_dict = {}
@@ -265,7 +272,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
             torch.cuda.empty_cache()
             print_gpu_memory(accelerator)
             layer = layers[i]
-            subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+            subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
             accelerator.print(subset)
 
             layer.to(device)
@@ -304,7 +311,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
                 _substitute_single_linear_weight(
                     module=subset[name],
                     accelerator=accelerator,
-                    parameter_ratio=args.sparsity_ratio,
+                    parameter_ratio=parameter_ratio,
                     has_sparse=has_sparse,
                     use_svd=use_svd,
                     update_state_dict=update_state_dict,
@@ -317,7 +324,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
             layer.to("cpu")
 
         # 🔍 set parameter ratio for saving.
-        setattr(model.config, "reduced_rank", update_state_dict["model.layers.0.block_sparse_moe.experts.0.w1.left.weight"].shape[1])
+        setattr(unwrapped_model.config, "reduced_rank", update_state_dict["model.layers.0.block_sparse_moe.experts.0.w1.left.weight"].shape[1])
 
     elif level == "layer":
         reduced_rank = []
@@ -327,7 +334,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
             torch.cuda.empty_cache()
             print_gpu_memory(accelerator)
             layer = layers[i]
-            subset = find_layers_for_moe(layer)  # 🔍 Find layers to prune
+            subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
             accelerator.print(subset)
 
             layer.to(device)
@@ -378,7 +385,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
             reduced_ranks_w1 = _substitute_layer_linear_weight(
                 module_list=w1_list,
                 accelerator=accelerator,
-                parameter_ratio=args.sparsity_ratio,
+                parameter_ratio=parameter_ratio,
                 has_sparse=has_sparse,
                 use_svd=use_svd,
                 update_state_dict=update_state_dict,
@@ -390,7 +397,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
             reduced_ranks_w2 = _substitute_layer_linear_weight(
                 module_list=w2_list,
                 accelerator=accelerator,
-                parameter_ratio=args.sparsity_ratio,
+                parameter_ratio=parameter_ratio,
                 has_sparse=has_sparse,
                 use_svd=use_svd,
                 update_state_dict=update_state_dict,
@@ -402,7 +409,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
             reduced_ranks_w3 = _substitute_layer_linear_weight(
                 module_list=w3_list,
                 accelerator=accelerator,
-                parameter_ratio=args.sparsity_ratio,
+                parameter_ratio=parameter_ratio,
                 has_sparse=has_sparse,
                 use_svd=use_svd,
                 update_state_dict=update_state_dict,
@@ -420,7 +427,7 @@ def decompose_moe(args, model, accelerator: Accelerator, level="expert", has_spa
                     "w3": reduced_ranks_w3,
                 }
             )
-            setattr(model.config, "reduced_rank", reduced_rank)
+            setattr(unwrapped_model.config, "reduced_rank", reduced_rank)
             #######################################################
 
             layer.to("cpu")
