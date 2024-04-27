@@ -1,7 +1,7 @@
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
-EXPERT_DROP_METHODS = ('layerwise_pruning', 'progressive_pruning', 'dynamic_skipping')
+EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'progressive_pruning', 'dynamic_skipping', 'post_dropping')
 
 
 @dataclass

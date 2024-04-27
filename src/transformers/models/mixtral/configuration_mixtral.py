@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mixtral model configuration"""
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -131,7 +131,7 @@ class MixtralConfig(PretrainedConfig):
         sliding_window=None,
         attention_dropout=0.0,
         num_experts_per_tok=2,
-        num_local_experts=8,
+        num_local_experts: Union[int, list] = 8,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         **kwargs,

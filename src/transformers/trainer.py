@@ -743,6 +743,10 @@ class Trainer:
                     # PeftMixedModel do not provide a `get_base_model` method
                     model_to_inspect = self.model.base_model.model
             signature = inspect.signature(model_to_inspect.forward)
+            # print(f"model_to_inspect: {model_to_inspect.__class__.__name__}")
+            # print(f"self.model.__class__.__name__: {self.model.__class__.__name__}")
+            # print(f"signature: {signature}")
+
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
@@ -752,7 +756,6 @@ class Trainer:
             return dataset
         self._set_signature_columns_if_needed()
         signature_columns = self._signature_columns
-
         ignored_columns = list(set(dataset.column_names) - set(signature_columns))
         if len(ignored_columns) > 0:
             dset_description = "" if description is None else f"in the {description} set"
@@ -829,12 +832,14 @@ class Trainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
+        # print(f"train_dataset: {train_dataset}")
         data_collator = self.data_collator
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
         else:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
+        # print(f"train_dataset: {train_dataset}")
         dataloader_params = {
             "batch_size": self._train_batch_size,
             "collate_fn": data_collator,

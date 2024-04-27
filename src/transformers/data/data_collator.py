@@ -61,7 +61,7 @@ def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
     # Save the state of the warning, then disable it
     warning_state = tokenizer.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False)
     tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
-
+    # print(f"pad_args: {pad_args}, pad_kwargs: {pad_kwargs}")
     try:
         padded = tokenizer.pad(*pad_args, **pad_kwargs)
     finally:
@@ -599,6 +599,7 @@ class DataCollatorForSeq2Seq:
 
             padding_side = self.tokenizer.padding_side
             for feature in features:
+                # print(f"features: {features}")
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
                 if isinstance(feature["labels"], list):
                     feature["labels"] = (

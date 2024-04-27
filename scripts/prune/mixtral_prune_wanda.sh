@@ -10,7 +10,7 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:2
 #SBATCH --quotatype=spot
 # SBATCH --quotatype=auto
 # reserved spot auto

@@ -91,7 +91,6 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
             accelerator.print(f"Updating {name} (device = {update_state_dict[name].device})")
             save_state_dict[name] = update_state_dict[name]
 
-
         # 🔍 initialize a new model and save
         accelerator.print("Initializing the new model...")
         unwrapped_model = accelerator.unwrap_model(model)
@@ -108,5 +107,13 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
     accelerator.print(f"Model saved to {prune_model_save_path}")
 
 
-def save_expert_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, update_state_dict):
-    save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
+def save_expert_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator):
+    if accelerator.is_main_process:
+        if not os.path.exists(prune_model_save_path):
+            os.makedirs(prune_model_save_path)
+    accelerator.wait_for_everyone()
+    # tokenizer.save_pretrained(prune_model_save_path)
+    unwrapped_model = accelerator.unwrap_model(model)
+    unwrapped_model.config.save_pretrained(prune_model_save_path)  
+    # unwrapped_model.generation_config.save_pretrained(prune_model_save_path)
+    # save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator, update_state_dict)

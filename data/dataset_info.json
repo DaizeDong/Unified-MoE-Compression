@@ -403,7 +403,7 @@
   "Evol": {
     "file_name": "data-evol_instruct-decontaminated.jsonl", 
     "columns": {
-      "prompt": "query", 
+      "prompt": "instruction", 
       "response": "response"
     }
   }

@@ -343,7 +343,7 @@ class WeightRecordWrapper:
         if self.weight is None and self.layer.weight.data.shape[0] > 0:
             # capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
             self.weight = self.layer.weight.data.clone().cpu()
-            print(self.layer_name, self.weight.data.shape)
+            # print(f"record {self.layer_name}, {self.weight.data.shape}")
 
 
 class PrunableMixtralSparseMoeBlockWrapper:
