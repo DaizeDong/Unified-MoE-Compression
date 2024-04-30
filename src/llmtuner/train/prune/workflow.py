@@ -61,8 +61,10 @@ def run_prune(
         model.save_pretrained(pruning_args.prune_model_save_path)
         tokenizer.save_pretrained(pruning_args.prune_model_save_path)
 
-        
-        # save_decomposed_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
+        f = open(os.path.join(pruning_args.prune_model_save_path, "config.json"), 'w')
+        config_to_save = json.dumps(config, indent=2, sort_keys=True)
+        f.write(config_to_save)
+        f.close()
         exit()
         
     if pruning_args.prune_method in DATA_AWARE_PRUNING_METHODS:

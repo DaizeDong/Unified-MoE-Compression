@@ -98,6 +98,7 @@ def load_model_and_tokenizer(
                 # **model_kwargs,
             )
 
+                    
     patch_model(model, tokenizer, model_args, is_trainable)
     register_autoclass(config, model, tokenizer)
 
@@ -141,7 +142,10 @@ def load_model_and_tokenizer(
                     name, param.dtype, param.device, param.requires_grad
                 )
             )
-
+    for name, module in model.named_modules():
+        if hasattr(module, "sparseThreshold"):
+                module.sparseThreshold.requires_grad = True
+    
     return model, tokenizer
 
 

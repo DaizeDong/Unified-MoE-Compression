@@ -1878,6 +1878,7 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
+
         model.zero_grad()
         grad_norm: Optional[float] = None
 
@@ -1964,7 +1965,11 @@ class Trainer:
 
                 with self.accelerator.accumulate(model):
                     tr_loss_step = self.training_step(model, inputs)
-
+                    
+                # for name, params in model.named_parameters():
+                #     if "threshold" in name and params.requires_grad:
+                #         logger.info(name, params.grad)
+                        
                 if (
                     args.logging_nan_inf_filter
                     and not is_torch_tpu_available()

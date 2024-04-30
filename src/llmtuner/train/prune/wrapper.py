@@ -351,6 +351,7 @@ class PrunableMixtralSparseMoeBlockWrapper:
         self.layer = layer
         self.scores = None
         self.nsamples = 0
+        self.top_k = layer.top_k
 
     def add_batch(self, input, router_logits):
         if len(input.shape) == 2:
@@ -359,8 +360,20 @@ class PrunableMixtralSparseMoeBlockWrapper:
             batch_size = input.shape[0]
 
         # Record scores
-        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, hidden_size)
+        routing_weights = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        mask = torch.zeros_like(router_logits, device=router_logits.device)
+        mask.scatter_(-1, selected_experts, 1)
+        # print(f"routing_weights: {routing_weights}")
+
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        # routing_weights = routing_weights * mask
+        
+        # print(f"routing_weights: {routing_weights}")
+        # The above code is reshaping the `router_logits` array into a 2D array with a shape of
+        # `(batch_size * seq_len, n_experts)`. This means that it is rearranging the elements of the
+        # `router_logits` array into a new shape where the first dimension is the product of
+        # `batch_size` and `seq_len`, and the second dimension is `n_experts`.
         # print("routing_weights", routing_weights.shape)
 
         if self.scores is None:

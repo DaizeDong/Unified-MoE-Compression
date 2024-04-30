@@ -70,6 +70,9 @@ class PruningArguments:
     use_svd: Optional[bool] = field(
         default=True,
     )
+    top_scores: Optional[bool] = field(
+        default=True,
+    )
 
     # 🔍 For gate-remapping
     pruned_model_path: Optional[str] = field(

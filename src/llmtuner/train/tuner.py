@@ -3,8 +3,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import torch
 from transformers import PreTrainedModel
 import transformers
+# import peft
 
-print("transformers", transformers)
+# print("transformers", transformers)
+# print("peft", peft)
 
 from .dpo import run_dpo
 from .ppo import run_ppo

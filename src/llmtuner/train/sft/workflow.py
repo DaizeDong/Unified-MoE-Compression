@@ -12,6 +12,8 @@ from ...model import load_model_and_tokenizer
 from ...train.sft.metric import ComputeMetrics
 from ...train.sft.trainer import CustomSeq2SeqTrainer
 from ...train.utils import create_modelcard_and_push
+import json
+import os
 
 
 if TYPE_CHECKING:
@@ -28,9 +30,27 @@ def run_sft(
     generating_args: "GeneratingArguments",
     callbacks: Optional[List["TrainerCallback"]] = None,
 ):
+    
+    with open(os.path.join(model_args.model_name_or_path, "config.json")) as f:
+        config = json.load(f)
+        config["mode"] = "dynamic"
+        
+    f = open(os.path.join(model_args.model_name_or_path, "config.json"), 'w')
+    config_to_save = json.dumps(config, indent=2, sort_keys=True)
+    f.write(config_to_save)
+    f.close()
+        
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
+    # model.save_pretrained("/mnt/petrelfs/dongdaize.d/workspace/compression/results_sft/Mixtral-8x7B-v0.1-bits4",
+    #                         safe_serialization=True,
+    #                         # save_function=xm.save,
+    #                     )
+    # exit()
+    for name, params in model.named_parameters():
+        if params.requires_grad: 
+            print(name)
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage="sft")
-    print(f"dataset: {dataset}")
+    # print(f"dataset: {dataset}")
 
     if training_args.predict_with_generate:
         tokenizer.padding_side = "left"  # use left-padding in generation

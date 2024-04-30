@@ -11,7 +11,7 @@
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH --quotatype=reserved
+#SBATCH --quotatype=auto
 
 # SBATCH --quotatype=reserved
 # SBATCH --quotatype=spot
@@ -48,7 +48,7 @@ export LOGLEVEL=INFO
     echo "$PORT"
   }
 
-  port=$(get_random_port 29500 29600) #任取一个未占用端口号
+  port=$(get_random_port 29400 29600) #任取一个未占用端口号
   echo "Port: $port"
 }
 
@@ -82,7 +82,7 @@ echo "Total GPUs: $num_processes"
 folder_name="Mixtral-8x7B-v0.1-bits4"
 autogptq=True
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}/checkpoint
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_sft/${folder_name}
 # lora_target=w1,w2,w3
 lora_target=gate
 
@@ -90,12 +90,19 @@ lora_target=gate
 # dataset=alpaca-gpt4_de
 # dataset=c4_valid
 
-bs=4
+bs=32
 dataset=Evol
 learning_rate=5e-5
 finetuning_type=lora
 logging_steps=10
+save_steps=50
 num_train_epochs=1
+max_train_examples=10000
+max_steps=$(expr ${max_train_examples} / ${bs})
+# num_processes=1
+do_train=True
+do_eval=True
+ddp_find_unused_parameters=True
 
 source ~/anaconda3/bin/activate awq
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
@@ -108,8 +115,8 @@ srun accelerate launch \
   --main_process_port ${port} \
   src/train_bash.py \
   --stage sft \
-  --do_train \
-  --do_eval \
+  --do_train ${do_train} \
+  --do_eval ${do_eval} \
   --model_name_or_path ${model_name_or_path} \
   --dataset ${dataset} \
   --finetuning_type $finetuning_type \
@@ -118,11 +125,13 @@ srun accelerate launch \
   --per_device_train_batch_size $bs \
   --learning_rate $learning_rate \
   --logging_steps $logging_steps \
+  --save_steps $save_steps \
   --plot_loss \
   --autogptq $autogptq \
   --num_train_epochs $num_train_epochs \
   --template default \
   --remove_unused_columns False \
   --overwrite_output_dir \
+  # --ddp_find_unused_parameters $ddp_find_unused_parameters \
 #   --bf16
 #  --print_param_status \

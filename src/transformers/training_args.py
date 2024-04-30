@@ -549,7 +549,7 @@ class TrainingArguments:
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
             integrations.
-        ddp_find_unused_parameters (`bool`, *optional*):
+        find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         ddp_bucket_cap_mb (`int`, *optional*):

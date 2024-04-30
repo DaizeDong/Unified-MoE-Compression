@@ -8,7 +8,7 @@ import transformers
 from .utils import find_moe_expert_linears, prepare_calibration_input, print_gpu_memory
 from .wrapper import WandaWrapper, SparseGPTWrapper
 
-print("transformers", transformers)
+# print("transformers", transformers)
 
 
 @torch.no_grad()

@@ -138,6 +138,8 @@ def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: Da
 
     accelerator.print('Starting ...')
     update_num_local_experts_list = []
+    layer_experts_idx = []
+    layer_deltas = []
     
     for i in tqdm(range(len(layers)), desc="Dropping layers...", disable=not accelerator.is_main_process):
         sys.stderr.flush()
@@ -199,9 +201,13 @@ def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: Da
             experts_to_preserve = sorted(list(set(range(num_local_experts)) - set(experts_to_drop)))
         
         accelerator.print(f"layer {i} scores: {scores}")
+        delta = measure_delta_top2(scores)
+        accelerator.print(f"layer {i} delta: {delta}")
         accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
         update_num_local_experts_list.append(len(experts_to_preserve))
-
+        layer_experts_idx.append(experts_to_preserve)
+        layer_deltas.append(delta)
+            
             # 🔍 update the state dict
             # 👆 get weights from the "captured_weights_wrapped_layers"
             # update_state_dict[f"{module_state_dict_name}.gate.weight"] = captured_weights_wrapped_layers[f"{name}.gate"].weight[list(experts_to_preserve)]
@@ -222,9 +228,14 @@ def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: Da
     accelerator.print("Expert dropping done!")
     unwrapped_model.config.use_cache = use_cache
     torch.cuda.empty_cache()
-    setattr(accelerator.unwrap_model(model).config, "num_local_experts", args.r)
-    unwrapped_model.config.num_local_experts = args.r
-
+    unwrapped_model.config.num_local_experts = update_num_local_experts_list
+    unwrapped_model.config.layer_experts_idx = layer_experts_idx
+    unwrapped_model.config.layer_deltas = layer_deltas
+    setattr(unwrapped_model.config, "num_local_experts", args.r)
+    setattr(unwrapped_model.config, "mode", "dynamic") # 🔍 ensure dynamic skipping. 
+    accelerator.print("Expert dropping done!")
+    unwrapped_model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
     # for name, weight in update_state_dict.items():
     #     accelerator.print(name, weight.shape)
 
@@ -280,6 +291,8 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
             captured_weights_wrapped_layers[module_state_dict_name] = WeightRecordWrapper(captured_weights_subset[name], layer_name=name)
             new_captured_weights_subset[module_state_dict_name] = captured_weights_subset[name]
 
+        # accelerator.print(f"captured_weights_wrapped_layers: {captured_weights_wrapped_layers.keys()}")
+
         # Forward hook for recording metrics
         def add_batch(name):
             def hook(_, input, output):
@@ -327,6 +340,7 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
 
     # 🔍 Expert Drop
     global_scores = None
+    layer_deltas = []
     # for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping Experts...'):
     # module_state_dict_name = f"model.layers.{l}.block_sparse_moe"
     for module_state_dict_name in wrapped_layers:
@@ -337,7 +351,8 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
         # [IMPORTANT] all reduce across devices
         scores = wrapped_layers[module_state_dict_name].scores
         scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
-
+        delta = measure_delta_top2(scores)
+        accelerator.print(f"layer {module_state_dict_name} delta: {delta}")
         # if hasattr(wrapped_module, 'cache_space'):
         # 🔍 [IMPORTANT] all reduce across devices
         # wrapped_module.cache_space.scores = accelerator.reduce(wrapped_module.cache_space.scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
@@ -347,6 +362,7 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
         # layer.block_sparse_moe = wrapped_module.layer
         # accelerator.print(f"layer {layer_id}: {layer.block_sparse_moe}")
         global_scores = torch.cat((global_scores, scores), dim=0) if global_scores is not None else scores  # 🔍 gather the scores.
+        layer_deltas.append(delta)
 
     accelerator.print(f"global_scores: {global_scores}")
     _, experts_to_drop = torch.topk(global_scores, (num_local_experts - args.r) * len(layers), largest=False)
@@ -380,6 +396,8 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
 
     unwrapped_model.config.num_local_experts = update_num_local_experts_list
     unwrapped_model.config.layer_experts_idx = layer_experts_idx
+    unwrapped_model.config.layer_deltas = layer_deltas
+    setattr(unwrapped_model.config, "mode", "dynamic") # 🔍 ensure dynamic skipping. 
     accelerator.print("Expert dropping done!")
     unwrapped_model.config.use_cache = use_cache
     torch.cuda.empty_cache()
@@ -513,3 +531,9 @@ def post_experts_drop(model, layer_experts_idx, accelerator):
         # 🔍 drop experts.
         layer.block_sparse_moe.experts = torch.nn.ModuleList([layer.block_sparse_moe.experts[i] for i in experts_to_preserve])
         layer.num_experts = r
+        
+        
+def measure_delta_top2(scores):
+    sorted_scores = torch.sort(scores, descending=True)
+    delta = sorted_scores[0] / sorted_scores[1]
+    return delta
