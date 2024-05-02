@@ -1,12 +1,11 @@
 import sys
 import torch
-import torch.nn as nn
 from accelerate import Accelerator
 from tqdm import tqdm
 
-import transformers
 from .utils import find_moe_expert_linears, prepare_calibration_input, print_gpu_memory
 from .wrapper import WandaWrapper, SparseGPTWrapper
+
 
 # print("transformers", transformers)
 
@@ -451,37 +450,39 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
             h.remove()
 
         # 🔍 Prune
-        for name in subset: # 🔍semi-structured
+        for name in subset:  # 🔍semi-structured
             module_state_dict_name = f"model.layers.{i}.{name}"
             accelerator.print(f"Pruning module {module_state_dict_name}")
-            W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
+            W = wrapped_layers[name].weight.data.to(device)  # 👆 use the captured weights
+            W_metric = torch.abs(W) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
             W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
             W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
 
             if prune_n != 0:
-                # structured n:m sparsity
+                # 🔍semi-structured n:m sparsity
                 for ii in range(W_metric.shape[1]):
                     if ii % prune_m == 0:
                         tmp = W_metric[:, ii:(ii + prune_m)].float()
                         W_mask.scatter_(1, ii + torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
-            elif sparsity_type == "structured": # 🔍structured pruning, but may be applied to another dimention. 
-                # for ii in range(W_metric.shape[1]):
-                    # if ii % prune_m == 0:
-                if "w2" in name: 
-                    # prune_m = W_metric.size()[-1]
-                    # prune_n = prune_m * args.sparsity_ratio
-                    # tmp = W_metric[:, :prune_m].float()
-                    # W_mask.scatter_(1, torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
-        
-                    prune_m = W_metric.size()[0]
-                    prune_n = prune_m * args.sparsity_ratio
-                    tmp = W_metric[:prune_m, :].float()
-                    W_mask.scatter_(0, torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
-        
-            else:       # 🔍unstructured
+            # elif sparsity_type == "structured": # 🔍structured pruning, but may be applied to another dimention. 
+            #     # for ii in range(W_metric.shape[1]):
+            #         # if ii % prune_m == 0:
+            #     if "w2" in name: 
+            #         # prune_m = W_metric.size()[-1]
+            #         # prune_n = prune_m * args.sparsity_ratio
+            #         # tmp = W_metric[:, :prune_m].float()
+            #         # W_mask.scatter_(1, torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
+
+            #         prune_m = W_metric.size()[0]
+            #         prune_n = prune_m * args.sparsity_ratio
+            #         tmp = W_metric[:prune_m, :].float()
+            #         W_mask.scatter_(0, torch.topk(tmp, prune_n, dim=1, largest=False)[1], True)
+
+            else:
+                # 🔍unstructured
                 sort_res = torch.sort(W_metric, dim=-1, stable=True)
 
-                if args.use_variant: 
+                if args.use_variant:
                     # wanda variant
                     def return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before):
                         thres_cumsum = sum_before * alpha
@@ -514,8 +515,8 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
                     W_mask.scatter_(1, indices, True)
 
             # 🔍 update the state dict
-            # 🔍 the weights would not change if directly updating them using "subset[name].weight.data[W_mask] = 0"
-            update_state_dict[module_state_dict_name + ".weight"] = (subset[name].weight * (torch.ones_like(W_mask) - W_mask)).bfloat16().cpu()
+            # 🔍 the weights would not change if directly updating them using "W.data[W_mask] = 0"
+            update_state_dict[module_state_dict_name + ".weight"] = (W * (torch.ones_like(W_mask) - W_mask)).bfloat16().cpu()
 
         # Update inputs & outputs
         inputs, outputs = outputs, inputs
@@ -555,19 +556,19 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
         subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
 
         # Wrap layers
-        gpts = {}
+        wrapped_layers = {}
         for name in subset:
-            gpts[name] = SparseGPTWrapper(subset[name])
+            wrapped_layers[name] = SparseGPTWrapper(subset[name])
 
         def add_batch(name):
             def hook(_, input, output):
-                gpts[name].add_batch(input[0].data, output.data)
+                wrapped_layers[name].add_batch(input[0].data, output.data)
 
             return hook
 
         # Get importance
         handles = []
-        for name in gpts:
+        for name in wrapped_layers:
             handles.append(subset[name].register_forward_hook(add_batch(name)))
         for j in range(num_samples):
             outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
@@ -575,18 +576,12 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
             h.remove()
 
         # Prune
-        for name in gpts:
+        for name in wrapped_layers:
             module_state_dict_name = f"model.layers.{i}.{name}"
             accelerator.print(f"Pruning module {module_state_dict_name}")
 
-            W = subset[name].weight.data.clone()
-            if isinstance(subset[name], nn.Conv2d):
-                W = W.flatten(1)
-            if isinstance(subset[name], transformers.Conv1D):
-                W = W.t()
-            W = W.float()  # this makes no sense
-
-            H = gpts[name].H
+            W = wrapped_layers[name].weight.data.to(device).float()  # 👆 use the captured weights
+            H = wrapped_layers[name].H
             H = accelerator.reduce(H, reduction="mean")  # 🔍 all reduce across devices
             # gpts[name].H = None
             # torch.cuda.empty_cache()
@@ -595,10 +590,10 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
             H[dead, dead] = 1
             W[:, dead] = 0
 
-            Losses = torch.zeros(gpts[name].rows, device=gpts[name].device)
+            Losses = torch.zeros(wrapped_layers[name].rows, device=wrapped_layers[name].device)
 
             damp = percdamp * torch.mean(torch.diag(H))
-            diag = torch.arange(gpts[name].columns, device=gpts[name].device)
+            diag = torch.arange(wrapped_layers[name].columns, device=wrapped_layers[name].device)
             H[diag, diag] += damp
             H = torch.linalg.cholesky(H)
             H = torch.cholesky_inverse(H)
@@ -608,8 +603,8 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
             mask = None
 
             # formally begin
-            for i1 in range(0, gpts[name].columns, blocksize):
-                i2 = min(i1 + blocksize, gpts[name].columns)
+            for i1 in range(0, wrapped_layers[name].columns, blocksize):
+                i2 = min(i1 + blocksize, wrapped_layers[name].columns)
                 count = i2 - i1
 
                 W1 = W[:, i1:i2].clone()
@@ -650,12 +645,9 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
                 Losses += torch.sum(Losses1, 1) / 2
                 W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
 
-            if isinstance(subset[name], transformers.Conv1D):
-                W = W.t()
-
             # 🔍 update the state dict
             # 🔍 the weights would not change if directly applying them
-            update_state_dict[module_state_dict_name + ".weight"] = W.reshape(subset[name].weight.shape).bfloat16().cpu()
+            update_state_dict[module_state_dict_name + ".weight"] = W.bfloat16().cpu()
             # subset[name].weight.data = W.reshape(subset[name].weight.shape).to(subset[name].weight.data.dtype)
 
         # Update inputs & outputs

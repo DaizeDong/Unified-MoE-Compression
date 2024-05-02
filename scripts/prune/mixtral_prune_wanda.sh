@@ -10,9 +10,9 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:2
-#SBATCH --quotatype=spot
-# SBATCH --quotatype=auto
+#SBATCH --gres=gpu:4
+# SBATCH --quotatype=spot
+#SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -72,7 +72,6 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 # dataset="MetaMathQA"
 # dataset="codealpaca"
-
 prune_data_type="pt"
 
 n_calibration_samples=128
@@ -80,16 +79,14 @@ seq_len=2048
 sparsity_ratio=0.5
 
 prune_method="wanda"
-# prune_method="decompose_moe"
-
-sparsity_type="unstructured"
+#sparsity_type="unstructured"
 #sparsity_type="4:8"
-#sparsity_type="2:4"
-sparsity_type="structured"
+sparsity_type="2:4"
+#sparsity_type="structured"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 #folder_name="debugggggg"
-#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
+folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
 #folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-all"
 #folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123"
 #folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all"
@@ -99,12 +96,11 @@ model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 #folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l1"
 #folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l2"
 #folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-w123-all-l4"
-folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-freq-w123-all-l1"
+#folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-freq-w123-all-l1"
+echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
-
-echo ${folder_name}
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression

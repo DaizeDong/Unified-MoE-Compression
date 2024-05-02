@@ -170,3 +170,5 @@ cache/
 /results_pt/
 /results_prune/
 /results_analysis/
+/results_sft/
+/logs_sft/

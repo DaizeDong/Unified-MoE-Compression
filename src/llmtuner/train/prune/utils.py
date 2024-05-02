@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn, cuda
 
-from transformers.models.mixtral.modeling_mixtral import ExpertLinear, MixtralSparseMoeBlock
+from transformers.models.mixtral.modeling_mixtral import ExpertLinear
 
 
 def print_gpu_memory(accelerator):
@@ -66,12 +66,6 @@ def find_moe_gates(module, layers=[nn.Linear], name='') -> dict:
     for key in list(res.keys()):
         if "gate" not in key:
             res.pop(key)
-    return res
-
-
-def find_moe_experts(module, layers=[MixtralSparseMoeBlock], name='') -> dict:
-    # 🔍 find only the expert blocks
-    res = find_modules(module, layers, name)
     return res
 
 

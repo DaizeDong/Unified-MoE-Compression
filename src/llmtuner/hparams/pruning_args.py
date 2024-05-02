@@ -2,6 +2,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
 EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'progressive_pruning', 'dynamic_skipping', 'post_dropping')
+BLOCK_DROP_METHODS = ('consecutive', 'discrete')
 
 
 @dataclass
@@ -12,6 +13,10 @@ class PruningArguments:
     prune_seed: Optional[int] = field(
         default=42,
         metadata={"help": "Seed for sampling the calibration data."},
+    )
+    prune_method: Optional[str] = field(
+        default="wanda",
+        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe", "expert_drop", "block_drop"]},
     )
     prune_model_save_path: Optional[str] = field(
         default=None,
@@ -36,24 +41,9 @@ class PruningArguments:
         default="unstructured",
         metadata={"choices": ["structured", "unstructured", "4:8", "2:4"]},
     )
-    prune_method: Optional[str] = field(
-        default="wanda",
-        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe", "expert_drop"]},
-    )
     use_variant: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to use the variant for Wanda."},
-    )
-    
-    # 🔍 For expert drop
-    expert_drop_method: Optional[str] = field(
-        default="layerwise_pruning",
-        metadata={"help": ' '.join(['Supported pruning methods:'] + list(EXPERT_DROP_METHODS)),
-                  "choices": EXPERT_DROP_METHODS},
-    )
-    r: Optional[int] = field(
-        default=4,
-        metadata={"help": 'Number of experts to preserve'}
     )
 
     # 🔍 For decomposition
@@ -72,6 +62,33 @@ class PruningArguments:
     )
     top_scores: Optional[bool] = field(
         default=True,
+    )
+
+    # 🔍 For expert drop
+    expert_drop_method: Optional[str] = field(
+        default="layerwise_pruning",
+        metadata={"help": ' '.join(['Supported dropping methods:'] + list(EXPERT_DROP_METHODS)),
+                  "choices": EXPERT_DROP_METHODS},
+    )
+    r: Optional[int] = field(
+        default=4,
+        metadata={"help": 'Number of experts to preserve'}
+    )
+
+    # 🔍 For block drop
+    block_drop_method: Optional[str] = field(
+        default="consecutive",
+        metadata={"help": ' '.join(['Supported dropping methods:'] + list(BLOCK_DROP_METHODS)),
+                  "choices": BLOCK_DROP_METHODS},
+    )
+    drop_n: Optional[int] = field(
+        default=4,
+        metadata={"help": 'Number of blocks to drop'}
+    )
+    similarity_cache_file: Optional[str] = field(
+        default=None,
+        metadata={"help": 'Cached file storing the similarity scores across layers to reduce the computation consumption. '
+                          'If the file does not exist, it will be created.'},
     )
 
     # 🔍 For gate-remapping

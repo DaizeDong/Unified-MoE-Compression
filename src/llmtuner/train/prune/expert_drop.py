@@ -8,8 +8,8 @@ from argparse import Namespace
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM
-from .utils import find_moe_experts, print_gpu_memory, prepare_calibration_input, find_moe_expert_linears_and_gate
+from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralSparseMoeBlock
+from .utils import print_gpu_memory, prepare_calibration_input, find_moe_expert_linears_and_gate, find_modules
 from .wrapper import PrunableMixtralSparseMoeBlockWrapper, WeightRecordWrapper
 
 logger = logging.getLogger(__name__)
@@ -140,13 +140,13 @@ def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: Da
     update_num_local_experts_list = []
     layer_experts_idx = []
     layer_deltas = []
-    
+
     for i in tqdm(range(len(layers)), desc="Dropping layers...", disable=not accelerator.is_main_process):
         sys.stderr.flush()
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_moe_experts(layer)  # 🔍 Find MixtralSparseMoeBlock
+        subset = find_modules(layer, [MixtralSparseMoeBlock])  # 🔍
         captured_weights_subset = find_moe_expert_linears_and_gate(layer)  # 👆 Find weights to capture (here the gate & w1 & w2 & w3)
         # accelerator.print(subset)
         # accelerator.print(captured_weights_subset)
@@ -195,32 +195,33 @@ def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: Da
             # [IMPORTANT] all reduce across devices
             scores = wrapped_layers[name].scores
             scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
-
+            ana_list = wrapped_layers[name].ana_list
             _, experts_to_drop = torch.topk(scores, num_local_experts - args.r, largest=False)
             experts_to_drop = experts_to_drop.tolist()
             experts_to_preserve = sorted(list(set(range(num_local_experts)) - set(experts_to_drop)))
-        
+
         accelerator.print(f"layer {i} scores: {scores}")
-        delta = measure_delta_top2(scores)
+        # delta = measure_delta_top2(scores)
+        delta = np.mean(ana_list)
         accelerator.print(f"layer {i} delta: {delta}")
         accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
         update_num_local_experts_list.append(len(experts_to_preserve))
         layer_experts_idx.append(experts_to_preserve)
         layer_deltas.append(delta)
-            
-            # 🔍 update the state dict
-            # 👆 get weights from the "captured_weights_wrapped_layers"
-            # update_state_dict[f"{module_state_dict_name}.gate.weight"] = captured_weights_wrapped_layers[f"{name}.gate"].weight[list(experts_to_preserve)]
-            # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w1"].weight
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w2"].weight
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w3"].weight
 
-            # update_state_dict[f"{module_state_dict_name}.gate.weight"] = wrapped_layers[name].gate[list(experts_to_preserve)].clone().bfloat16().cpu()
-            # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = wrapped_layers[name].w1.clone().bfloat16().cpu()
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = wrapped_layers[name].w2.clone().bfloat16().cpu()
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = wrapped_layers[name].w3.clone().bfloat16().cpu()
+        # 🔍 update the state dict
+        # 👆 get weights from the "captured_weights_wrapped_layers"
+        # update_state_dict[f"{module_state_dict_name}.gate.weight"] = captured_weights_wrapped_layers[f"{name}.gate"].weight[list(experts_to_preserve)]
+        # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
+        #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w1"].weight
+        #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w2"].weight
+        #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w3"].weight
+
+        # update_state_dict[f"{module_state_dict_name}.gate.weight"] = wrapped_layers[name].gate[list(experts_to_preserve)].clone().bfloat16().cpu()
+        # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
+        #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = wrapped_layers[name].w1.clone().bfloat16().cpu()
+        #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = wrapped_layers[name].w2.clone().bfloat16().cpu()
+        #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = wrapped_layers[name].w3.clone().bfloat16().cpu()
 
         # Update inputs & outputs
         inputs, outputs = outputs, inputs
@@ -232,7 +233,7 @@ def layerwise_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: Da
     unwrapped_model.config.layer_experts_idx = layer_experts_idx
     unwrapped_model.config.layer_deltas = layer_deltas
     setattr(unwrapped_model.config, "num_local_experts", args.r)
-    setattr(unwrapped_model.config, "mode", "dynamic") # 🔍 ensure dynamic skipping. 
+    setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
     accelerator.print("Expert dropping done!")
     unwrapped_model.config.use_cache = use_cache
     torch.cuda.empty_cache()
@@ -270,7 +271,7 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_moe_experts(layer)  # 🔍 Find MixtralSparseMoeBlock
+        subset = find_modules(layer, [MixtralSparseMoeBlock])  # 🔍
 
         captured_weights_subset = find_moe_expert_linears_and_gate(layer)  # 👆 Find weights to capture (here the gate & w1 & w2 & w3)
         # accelerator.print(captured_weights_subset)
@@ -350,8 +351,10 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
         # 🔍 sort total scores
         # [IMPORTANT] all reduce across devices
         scores = wrapped_layers[module_state_dict_name].scores
+        ana_list = wrapped_layers[module_state_dict_name].ana_list
         scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
-        delta = measure_delta_top2(scores)
+        # delta = measure_delta_top2(scores)
+        delta = np.mean(ana_list)
         accelerator.print(f"layer {module_state_dict_name} delta: {delta}")
         # if hasattr(wrapped_module, 'cache_space'):
         # 🔍 [IMPORTANT] all reduce across devices
@@ -387,7 +390,7 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
 
         update_num_local_experts_list.append(len(experts_to_preserve))
         layer_experts_idx.append(experts_to_preserve)
-        
+
         # wrapped_module = layer.block_sparse_moe
         # 🔍 select the experts for each layer. 
         # wrapped_module.experts_to_drop = [i for i in experts_to_drop if i >= layer_id * num_local_experts and i < (layer_id + 1) * num_local_experts]
@@ -397,7 +400,7 @@ def global_pruning(args: Namespace, model: MixtralForCausalLM, dataloader: DataL
     unwrapped_model.config.num_local_experts = update_num_local_experts_list
     unwrapped_model.config.layer_experts_idx = layer_experts_idx
     unwrapped_model.config.layer_deltas = layer_deltas
-    setattr(unwrapped_model.config, "mode", "dynamic") # 🔍 ensure dynamic skipping. 
+    setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
     accelerator.print("Expert dropping done!")
     unwrapped_model.config.use_cache = use_cache
     torch.cuda.empty_cache()
@@ -519,7 +522,6 @@ def post_experts_drop(model, layer_experts_idx, accelerator):
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     layers = unwrapped_model.model.layers
     for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping Experts...'):
-
         experts_to_preserve = layer_experts_idx[layer_id]
         accelerator.print(f"experts_to_preserve: {experts_to_preserve}")
         r = len(experts_to_preserve)
@@ -531,9 +533,10 @@ def post_experts_drop(model, layer_experts_idx, accelerator):
         # 🔍 drop experts.
         layer.block_sparse_moe.experts = torch.nn.ModuleList([layer.block_sparse_moe.experts[i] for i in experts_to_preserve])
         layer.num_experts = r
-        
-        
-def measure_delta_top2(scores):
-    sorted_scores = torch.sort(scores, descending=True)
-    delta = sorted_scores[0] / sorted_scores[1]
-    return delta
+
+
+# def measure_delta_top2(scores):
+#     sorted_scores, _ = torch.sort(scores, descending=True)
+#     delta = sorted_scores[1] / sorted_scores[0]
+#     print(f"sorted_scores:{sorted_scores}, sorted_scores[0]:{sorted_scores[0]}, sorted_scores[1]:{sorted_scores[1]}, delta:{delta}")
+#     return float(delta.data)

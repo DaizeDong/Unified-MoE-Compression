@@ -1,11 +1,12 @@
 import csv
+import fnmatch
 import gzip
 import json
 import lzma
 import os
 import pickle
 import shutil
-from typing import Union
+from typing import Union, List, Dict
 
 
 def create_dir(dir):
@@ -20,6 +21,24 @@ def delete_file_or_dir(dir):
         shutil.rmtree(dir)
     else:
         pass
+
+
+def find_files(dir, name_pattern):
+    """
+    Search for files matching a specified pattern in a given directory and its subdirectories.
+
+    Args:
+    - dir: String of root directory path to search.
+    - name_pattern: String of pattern to match filename against (e.g. '*.txt' to match all txt files).
+
+    Returns:
+    - A list of full paths to the found files.
+    """
+    matches = []
+    for root, dirs, files in os.walk(dir):
+        for filename in fnmatch.filter(files, name_pattern):
+            matches.append(os.path.join(root, filename))
+    return matches
 
 
 def save_compressed_file_7z(data, file_path):  # 7z
@@ -46,7 +65,7 @@ def load_compressed_file_gz(file_path):  # gz
     return data
 
 
-def read_csv(file_path, has_header=True) -> Union[list[list], list[dict]]:
+def read_csv(file_path, has_header=True) -> Union[List[List], List[Dict]]:
     """
     Read a CSV file and return its content.
 

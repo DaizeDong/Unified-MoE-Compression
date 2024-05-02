@@ -12,74 +12,74 @@ from transformers.models.mixtral.modeling_mixtral import ExpertLinear
 logger = logging.getLogger(__name__)
 
 
+def measure_delta_top2(scores):
+    sorted_scores, _ = torch.sort(scores, descending=True)
+    delta = sorted_scores[1] / sorted_scores[0]
+    print(f"sorted_scores:{sorted_scores}, sorted_scores[0]:{sorted_scores[0]}, sorted_scores[1]:{sorted_scores[1]}, delta:{delta}")
+    return float(delta.data)
+
+
 class WandaWrapper:
     def __init__(self, layer, layer_id=0, layer_name="none", multiply_score=True, p=2):
         self.layer = layer
-        self.device = self.layer.weight.device
-        print(layer_name, layer.weight.data.shape)
-        self.rows = layer.weight.data.shape[0]
-        self.columns = layer.weight.data.shape[1]
-
-        self.scaler_row = torch.zeros((self.columns), device=self.device)  # importance for each row
-        self.nsamples = 0
-
-        self.multiply_score = multiply_score
-        self.score_memery = torch.zeros((1,), device=self.device, dtype=torch.float32)  # the summation of (score ** p)
-
-        self.p = p
         self.layer_id = layer_id
         self.layer_name = layer_name
+        self.device = self.layer.weight.device
+        # print(layer_name, layer.weight.data.shape)
 
-    def numel(self):
-        return self.rows * self.columns
+        # self.rows = self.weight.data.shape[0]
+        # self.columns = self.weight.data.shape[1]
+        # self.scaler_row = torch.zeros((self.columns), device=self.device)  # importance for each row
+        self.scaler_row = None  # importance for each row
+        self.weight = None  # 👆 record weight
+        self.nsamples = 0
 
-    # 🔍 compute scores to obtain sparse ratios. 
+        # 🔍 for dynamic sparsity using scores
+        self.multiply_score = multiply_score
+        self.score_memery = torch.zeros((1,), device=self.device, dtype=torch.float32)  # the summation of (score ** p)
+        self.p = p
+
+    # def numel(self):
+    #     return self.rows * self.columns
+
     def add_scores(self, routing_scores):
-        self.score_memery += (routing_scores ** self.p).sum().clone().float()
+        # 🔍 compute scores to obtain sparse ratios.
+        self.score_memery += (routing_scores ** self.p).sum().float()  # add the token scores
+        # self.score_memery += routing_scores.numel().clone().float()  # add the token loads
 
     def add_batch(self, input, output, routing_scores=None):
-        # print(f"routing_scores: {routing_scores.shape}")
-        # print(f"routing_scores: {routing_scores}")
-        # print(type(self.layer))
-        # print(self.p)
-        # print(self.layer_name, type(self.layer), isinstance(self.layer, Expert))
-
+        # 🔍 rescale with scores
         if isinstance(self.layer, ExpertLinear):
             if self.multiply_score:
-                # 🔍 multiple routing_scores to inputs
+                # multiple routing_scores to inputs
                 routing_scores = (routing_scores ** (self.p / 2))  # dividing 2 as the latter "scaler_row" will calculate the squared value
                 input = input * routing_scores
             else:
-                # 🔍 add routing_scores to memory
-                self.score_memery += (routing_scores ** self.p).sum().float()  # add the token scores
-                # self.score_memery += routing_scores.numel().clone().float()  # add the token loads
+                # add routing_scores to memory
+                self.add_scores(routing_scores)
 
-        if len(input.shape) == 2:
-            input = input.unsqueeze(0)  # 🔍 input: shape(1, tokens, hidden_size)
-        tmp = input.shape[0]
-
-        if isinstance(self.layer, (nn.Linear, ExpertLinear)):  # 🔍 for both Linear and Expert
-            if len(input.shape) == 3:
-                input = input.reshape((-1, input.shape[-1]))  # input: shape(batch_size * seq_len, hidden_size)
-            input = input.t()
-        input = input.type(torch.float32)
-
-        self.scaler_row *= self.nsamples / (self.nsamples + tmp)
-        self.nsamples += tmp
-        self.scaler_row += (torch.norm(input, p=2, dim=1) ** 2) / self.nsamples  # 🔍 determined by the number of input tokens
-        # Description: torch.norm(input, p=2, dim=1) ** 2 <==> (input * input).sum(1), which is $\sum_{x_i\in X} x_i^2$
+        self.add_batch_no_score(input, output)
 
     def add_batch_no_score(self, input, output):
+        # 👆 capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
+        if self.weight is None and self.layer.weight.data.shape[0] > 0:
+            self.weight = self.layer.weight.data.clone().cpu()
+            self.rows = self.weight.shape[0]
+            self.columns = self.weight.shape[1]
+            # print(f"record {self.layer_name}, {self.weight.data.shape}")
+
         if len(input.shape) == 2:
-            input = input.unsqueeze(0)  # 🔍 input: shape(1, tokens, hidden_size)
+            input = input.unsqueeze(0)  # 🔍 shape(1, tokens, hidden_size)
         tmp = input.shape[0]
 
-        if isinstance(self.layer, (nn.Linear, ExpertLinear)):  # 🔍 for both Linear and Expert
+        if isinstance(self.layer, (nn.Linear, ExpertLinear)):
             if len(input.shape) == 3:
-                input = input.reshape((-1, input.shape[-1]))  # input: shape(batch_size * seq_len, hidden_size)
-            input = input.t()
+                input = input.reshape((-1, input.shape[-1]))  # shape(hidden_size, batch_size * seq_len)
+            input = input.t()  # shape(hidden_size, batch_size * seq_len)
         input = input.type(torch.float32)
 
+        if self.scaler_row is None:
+            self.scaler_row = torch.zeros((input.shape[0],), device=self.device)
         self.scaler_row *= self.nsamples / (self.nsamples + tmp)
         self.nsamples += tmp
         self.scaler_row += (torch.norm(input, p=2, dim=1) ** 2) / self.nsamples  # 🔍 determined by the number of input tokens
@@ -88,37 +88,49 @@ class WandaWrapper:
 
 class SparseGPTWrapper:
     def __init__(self, layer):
+        self.layer = layer
+        self.device = self.layer.weight.device
+
+        # W = layer.weight.data.clone()
+        # if isinstance(self.layer, nn.Conv2d):
+        #     W = W.flatten(1)
+        # if isinstance(self.layer, transformers.Conv1D):
+        #     W = W.t()
+        # self.rows = W.shape[0]
+        # self.columns = W.shape[1]
+        # self.H = torch.zeros((self.columns, self.columns), device=self.device)
+        self.H = None  # importance for each row
+        self.weight = None  # 👆 record weight
+        self.nsamples = 0
+
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
 
-        self.layer = layer
-        self.device = self.layer.weight.device
-        W = layer.weight.data.clone()
-        if isinstance(self.layer, nn.Conv2d):
-            W = W.flatten(1)
-        if isinstance(self.layer, transformers.Conv1D):
-            W = W.t()
-        self.rows = W.shape[0]
-        self.columns = W.shape[1]
-        self.H = torch.zeros((self.columns, self.columns), device=self.device)
-        self.nsamples = 0
-
     def add_batch(self, input, output):
+        # 👆 capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
+        if self.weight is None and self.layer.weight.data.shape[0] > 0:
+            self.weight = self.layer.weight.data.clone().cpu()
+            self.rows = self.weight.shape[0]
+            self.columns = self.weight.shape[1]
+            # print(f"record {self.layer_name}, {self.weight.data.shape}")
+
         if len(input.shape) == 2:
-            input = input.unsqueeze(0)  # input: shape(batch_size, seq_len, hidden_size)
+            input = input.unsqueeze(0)  # shape(batch_size, seq_len, hidden_size)
         batch_size = input.shape[0]
 
         if isinstance(self.layer, nn.Linear) or isinstance(self.layer, transformers.Conv1D):
             if len(input.shape) == 3:
-                input = input.reshape((-1, input.shape[-1]))  # input: shape(batch_size * seq_len, hidden_size)
-            input = input.t()
+                input = input.reshape((-1, input.shape[-1]))  # shape(batch_size * seq_len, hidden_size)
+            input = input.t()  # shape(hidden_size, batch_size * seq_len)
+        input = input.type(torch.float32)
 
         # Estimate the mean Hessian through iterative updates
+        if self.H is None:
+            self.H = torch.zeros((input.shape[0], input.shape[0]), device=self.device)
         self.H *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
         self.nsamples += batch_size
         input = math.sqrt(2 / self.nsamples) * input.float()
         self.H += input.matmul(input.t())  # update mean values by adding values from new samples
-
 
 
 # class PrunableMixtralSparseMoeBlockWrapper(nn.Module):
@@ -333,6 +345,23 @@ class SparseGPTWrapper:
 #         return update_state_dict
 
 
+class InputStatesRecordWrapper:
+    def __init__(self, layer, layer_name="none", record_output=False):
+        self.layer = layer
+        self.layer_name = layer_name
+        self.hidden_states = []
+
+        self.record_output = record_output
+        if record_output:
+            self.output_hidden_states = []
+
+    def record(self, input, output):
+        # input: (1, seq_len, hidden_size)
+        self.hidden_states.append(input.squeeze(0).clone().cpu())
+        if self.record_output:
+            self.output_hidden_states.append(output.squeeze(0).clone().cpu())
+
+
 class WeightRecordWrapper:
     def __init__(self, layer, layer_name="none"):
         self.layer = layer
@@ -352,6 +381,7 @@ class PrunableMixtralSparseMoeBlockWrapper:
         self.scores = None
         self.nsamples = 0
         self.top_k = layer.top_k
+        self.ana_list = []
 
     def add_batch(self, input, router_logits):
         if len(input.shape) == 2:
@@ -368,8 +398,12 @@ class PrunableMixtralSparseMoeBlockWrapper:
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         # routing_weights = routing_weights * mask
-        
         # print(f"routing_weights: {routing_weights}")
+
+        for j in range(len(routing_weights)):
+            sorted_weights, sort_indices = torch.sort(routing_weights[j], descending=True)
+            self.ana_list.append(float(sorted_weights[1] / sorted_weights[0]))
+
         # The above code is reshaping the `router_logits` array into a 2D array with a shape of
         # `(batch_size * seq_len, n_experts)`. This means that it is rearranging the elements of the
         # `router_logits` array into a new shape where the first dimension is the product of
@@ -379,6 +413,7 @@ class PrunableMixtralSparseMoeBlockWrapper:
         if self.scores is None:
             self.nsamples += batch_size
             self.scores = routing_weights.float().sum(0) / self.nsamples
+
         else:
             self.scores *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
             self.nsamples += batch_size
@@ -456,6 +491,7 @@ class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
         final_hidden_states = final_hidden_states.reshape(
             batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
+
 
 class GateRemapWrapper:
     def __init__(self, layer, layer_id=0, layer_name="none", record_input=True, record_output=True):

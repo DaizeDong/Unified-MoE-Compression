@@ -1,6 +1,7 @@
 import os
 import torch
 from accelerate import Accelerator
+from copy import deepcopy
 
 from .utils import check_sparsity_from_state_dict
 
@@ -114,6 +115,59 @@ def save_expert_dropped_model(prune_model_save_path, model, tokenizer, accelerat
     accelerator.wait_for_everyone()
     # tokenizer.save_pretrained(prune_model_save_path)
     unwrapped_model = accelerator.unwrap_model(model)
-    unwrapped_model.config.save_pretrained(prune_model_save_path)  
+    unwrapped_model.config.save_pretrained(prune_model_save_path)
     # unwrapped_model.generation_config.save_pretrained(prune_model_save_path)
     # save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
+
+
+def save_block_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
+    # 🔍 save
+    accelerator.print("Saving models... (may take minutes)")
+    if accelerator.is_main_process:
+        if not os.path.exists(prune_model_save_path):
+            os.makedirs(prune_model_save_path)
+    accelerator.wait_for_everyone()
+
+    # 🔍 get new layer id mapping
+    unwrapped_model = accelerator.unwrap_model(model)
+    reserved_layer_list = sorted(list(set(range(unwrapped_model.config.num_hidden_layers)) - set(dropped_layer_list)))
+    accelerator.print(f"Reserved layers: {reserved_layer_list}")
+
+    layer_id_mapping = {}
+    for new_id, reserved_old_id in enumerate(reserved_layer_list):
+        layer_id_mapping[reserved_old_id] = new_id
+
+    # get state dict
+    state_dict = accelerator.get_state_dict(model)
+
+    if state_dict is not None:
+        accelerator.print(f"State dict stored in CPU on process {accelerator.process_index}")
+
+        # 🔍 update state dict for saving
+        save_state_dict = {}
+        for state_name in sorted(list(state_dict.keys())):
+            for old_layer_id, new_layer_id in layer_id_mapping.items():
+                if f"layers.{old_layer_id}" in state_name:  # convert old ids to new ones
+                    save_state_dict[state_name.replace(f"layers.{old_layer_id}", f"layers.{new_layer_id}")] = state_dict[state_name]
+                elif f"layers." not in state_name:  # copy other states
+                    save_state_dict[state_name] = state_dict[state_name]
+
+        accelerator.print("Keys in save_state_dict:")
+        for key in save_state_dict.keys():
+            accelerator.print(key)
+
+        # 🔍 initialize a new model and save
+        accelerator.print("Initializing the new model...")
+        new_config = deepcopy(unwrapped_model.config)
+        new_config.num_hidden_layers = len(reserved_layer_list)
+        accelerator.print(new_config)
+        new_model = type(unwrapped_model)(new_config)
+        new_model.load_state_dict(save_state_dict, strict=False)
+        new_model.bfloat16()
+        accelerator.print("new_model", new_model)
+        accelerator.print("Saving...")
+        new_model.save_pretrained(prune_model_save_path)
+        tokenizer.save_pretrained(prune_model_save_path)
+
+    accelerator.wait_for_everyone()
+    accelerator.print(f"Model saved to {prune_model_save_path}")

@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 #SBATCH --job-name=AWQ
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/llm-awq-main/logs/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/llm-awq-main/logs/%x-%j.log
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
@@ -70,7 +70,7 @@ MODEL=/mnt/petrelfs/share_data/quxiaoye/models/llama2_7B
 
 # run AWQ search (optional; we provided the pre-computed results)
 # python -m awq.entry 
-source activate awq
+source activate quant
 cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/llm-awq-main
 
 python awq/entry.py \

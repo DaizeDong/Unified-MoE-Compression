@@ -11,7 +11,7 @@
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
-#SBATCH --quotatype=reserved
+#SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -62,26 +62,26 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-dataset="lima"
-prune_data_type="sft"
+#dataset="lima"
+#prune_data_type="sft"
 
 #dataset="wikitext"
 #prune_data_type="pt"
 
-#dataset="c4_train"
-#prune_data_type="pt"
+dataset="c4_train"
+prune_data_type="pt"
 
-n_calibration_samples=512
+n_calibration_samples=128
 seq_len=2048
 sparsity_ratio=0.5
-prune_method="sparsegpt"
 
+prune_method="sparsegpt"
 #sparsity_type="unstructured"
 #sparsity_type="4:8"
 sparsity_type="2:4"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}"
+folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
 

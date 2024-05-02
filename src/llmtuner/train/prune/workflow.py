@@ -5,10 +5,11 @@ from torch.utils.data import DataLoader
 from typing import TYPE_CHECKING, List, Optional
 
 from transformers import DataCollatorForSeq2Seq, DataCollatorForLanguageModeling, DataCollatorWithPadding
+from .block_drop import consecutive_dropping, discrete_dropping
 from .decompose import decompose_moe
 from .expert_drop import layerwise_pruning, progressive_pruning, dynamic_skipping, global_pruning, post_experts_drop
 from .gate_remap import gate_remap
-from .io import save_sparse_model, save_update_state_dict, save_decomposed_model, save_expert_dropped_model
+from .io import save_sparse_model, save_update_state_dict, save_decomposed_model, save_expert_dropped_model, save_block_dropped_model
 from ..dpo.collator import DPODataCollatorWithPadding
 from ..rm.collator import PairwiseDataCollatorWithPadding
 from ...data import get_dataset
@@ -20,13 +21,18 @@ if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
     from ...hparams import DataArguments, FinetuningArguments, ModelArguments, PruningArguments
 
-DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "expert_drop")
+DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "expert_drop", "block_drop")
 
 EXPERT_DROP_METHODS_FUNC = {
     'layerwise_pruning': layerwise_pruning,
     'global_pruning': global_pruning,
     'progressive_pruning': progressive_pruning,
     'dynamic_skipping': dynamic_skipping,
+}
+
+BLOCK_DROP_METHODS_FUNC = {
+    'consecutive': consecutive_dropping,
+    'discrete': discrete_dropping,
 }
 
 
@@ -54,7 +60,7 @@ def run_prune(
         import os
         with open(os.path.join(pruning_args.prune_model_save_path, "config.json")) as f:
             config = json.load(f)
-            layer_experts_idx = config["layer_experts_idx"]            
+            layer_experts_idx = config["layer_experts_idx"]
         post_experts_drop(model, layer_experts_idx, accelerator)
         accelerator.wait_for_everyone()
         accelerator.print(f"model: {model}")
@@ -66,7 +72,7 @@ def run_prune(
         f.write(config_to_save)
         f.close()
         exit()
-        
+
     if pruning_args.prune_method in DATA_AWARE_PRUNING_METHODS:
         # 🔍 dataset & data collator & dataloader
         dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.prune_data_type)
@@ -99,28 +105,6 @@ def run_prune(
         accelerator.print(f"Example Data (len = {len(dataset[0]['input_ids'])}):", dataset[0])
         if pruning_args.n_calibration_samples > len(dataset):
             raise ValueError("Number of calibration samples is greater than the number of samples in the dataset!")
-
-        # 🔍 Special for expert-drop.
-        # We need to wrap the model before "accelerator.prepare" so that the wrapped modules are maintained by DeepSpeed.
-        # if pruning_args.prune_method == "expert_drop":
-        #     layers = model.model.layers
-        #     for l, layer in enumerate(layers):
-        #         moe_module = layer.block_sparse_moe
-        #
-        #         moe_module.r = pruning_args.r
-        #         # moe_module.experts_to_drop = None
-        #         # moe_module.cache_space = CacheDataset()
-        #         # moe_module.cache_logits = False
-        #         # moe_module.cache_X = True
-        #         # moe_module.cache_Z = True
-        #         # moe_module.forward = types.MethodType(prunable_sparse_moe_block.forward, moe_module)
-        #         # moe_module.enumerate = types.MethodType(prunable_sparse_moe_block.enumerate, moe_module)
-        #         # moe_module.update_dropped_experts = types.MethodType(prunable_sparse_moe_block.update_dropped_experts, moe_module)
-        #         # moe_module.prune = types.MethodType(prunable_sparse_moe_block.prune, moe_module)
-        #
-        #         # layer.block_sparse_moe = PrunableMixtralSparseMoeBlockWrapper(layer.block_sparse_moe, r=pruning_args.r)
-        #         # layer.block_sparse_moe.cache_X = True
-        #         # layer.block_sparse_moe.cache_Z = True
 
         # 🔍 Prepare model & dataloader
         print("Preparing model...")
@@ -162,8 +146,10 @@ def run_prune(
         update_state_dict = decompose_moe(pruning_args, model, accelerator)  # Data-independent
     elif pruning_args.prune_method == "expert_drop":
         num_local_experts = getattr(accelerator.unwrap_model(model).config, "num_local_experts")
-        # remaining_experts = 
+        # remaining_experts =
         EXPERT_DROP_METHODS_FUNC[pruning_args.expert_drop_method](pruning_args, model, dataloader, accelerator, num_samples_each_device, num_local_experts)
+    elif pruning_args.prune_method == "block_drop":
+        dropped_layer_list = BLOCK_DROP_METHODS_FUNC[pruning_args.block_drop_method](pruning_args, model, dataloader, accelerator, num_samples_each_device)
 
     else:
         raise NotImplementedError
@@ -173,17 +159,17 @@ def run_prune(
     accelerator.print(f"model: {model}")
 
     # 🔍 Save sparse model to disk
-    if pruning_args.prune_method == "decompose_moe":
-        setattr(accelerator.unwrap_model(model).config, "decomposed", True)
-        setattr(accelerator.unwrap_model(model).config, "has_sparse", pruning_args.has_sparse)
-        if pruning_args.prune_model_save_path is not None:
+    if pruning_args.prune_model_save_path is not None:
+        if pruning_args.prune_method == "decompose_moe":
+            setattr(accelerator.unwrap_model(model).config, "decomposed", True)
+            setattr(accelerator.unwrap_model(model).config, "has_sparse", pruning_args.has_sparse)
             save_decomposed_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
-    elif pruning_args.prune_method == "expert_drop":
-        # 🔍 only return the idx of remaining experts. 
-        if pruning_args.prune_model_save_path is not None:
+        elif pruning_args.prune_method == "expert_drop":
+            # 🔍 only return the idx of remaining experts.
             save_expert_dropped_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator)
-    else:
-        if pruning_args.prune_model_save_path is not None:
+        elif pruning_args.prune_method == "block_drop":
+            save_block_dropped_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, dropped_layer_list=dropped_layer_list)
+        else:
             save_sparse_model(pruning_args.prune_model_save_path, model, tokenizer, accelerator, update_state_dict, check_sparsity=True)
 
     accelerator.print("All done!")
@@ -278,4 +264,3 @@ def run_prune_remap_gate(
     accelerator.wait_for_everyone()
 
     accelerator.print("All done!")
-
