@@ -71,7 +71,7 @@ model=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 # model=/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1
 # model=/mnt/petrelfs/share_data/quxiaoye/models/Llama_2_13b_chat
 
-quantized_model_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/
+quantized_model_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization
 bits=4
 seed=0
 num_samples=128
@@ -79,7 +79,7 @@ num_samples=128
 calibration_template=mistral
 calibration_template=default
 
-abbreviation=${model##*/}-bits${bits}
+abbreviation=${model##*/}-GPTQ-${bits}bits/checkpoint
 
 python gptq_auto.py --pretrained_model_dir $model --quantized_model_dir $quantized_model_dir/$abbreviation/checkpoint \
                     --bits $bits --save_and_reload --desc_act \

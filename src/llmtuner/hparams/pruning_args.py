@@ -2,7 +2,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
 EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'progressive_pruning', 'dynamic_skipping', 'post_dropping')
-BLOCK_DROP_METHODS = ('consecutive', 'discrete')
+BLOCK_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
+LAYER_DROP_METHODS = ('layer_pruning', 'post_dropping')
 
 
 @dataclass
@@ -16,7 +17,7 @@ class PruningArguments:
     )
     prune_method: Optional[str] = field(
         default="wanda",
-        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe", "expert_drop", "block_drop"]},
+        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe", "expert_drop", "block_drop", "layer_drop"]},
     )
     prune_model_save_path: Optional[str] = field(
         default=None,
@@ -81,10 +82,18 @@ class PruningArguments:
         metadata={"help": ' '.join(['Supported dropping methods:'] + list(BLOCK_DROP_METHODS)),
                   "choices": BLOCK_DROP_METHODS},
     )
+    
+    layer_drop_method: Optional[str] = field(
+        default="consecutive",
+        metadata={"help": ' '.join(['Supported dropping methods:'] + list(LAYER_DROP_METHODS)),
+                  "choices": LAYER_DROP_METHODS},
+    )
+    
     drop_n: Optional[int] = field(
         default=4,
         metadata={"help": 'Number of blocks to drop'}
     )
+    
     similarity_cache_file: Optional[str] = field(
         default=None,
         metadata={"help": 'Cached file storing the similarity scores across layers to reduce the computation consumption. '

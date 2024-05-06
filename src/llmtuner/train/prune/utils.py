@@ -29,7 +29,6 @@ def find_modules(module, layers=[], name='') -> dict:
     Returns:
         dict: Dictionary of layers of the given type(s) within the module.
     """
-    # print(name, type(module), type(module) in layers)
     if type(module) in layers:
         return {name: module}
     res = {}

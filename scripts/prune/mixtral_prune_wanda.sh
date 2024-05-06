@@ -80,8 +80,8 @@ sparsity_ratio=0.5
 
 prune_method="wanda"
 #sparsity_type="unstructured"
-#sparsity_type="4:8"
-sparsity_type="2:4"
+sparsity_type="4:8"
+# sparsity_type="2:4" 
 #sparsity_type="structured"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1

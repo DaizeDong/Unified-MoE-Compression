@@ -77,7 +77,7 @@ prune_data_type="pt"
 
 n_calibration_samples=128
 seq_len=2048
-r=6
+r=4
 
 prune_method="expert_drop"
 expert_drop_method="layerwise_pruning"
@@ -88,6 +88,7 @@ folder_name="Mixtral-${prune_method}-${expert_drop_method}-r${r}"
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
 
 echo ${folder_name}
 
@@ -96,49 +97,28 @@ conda deactivate
 source activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
-# srun accelerate launch \
-#   --config_file "config/accelerate/mixtral_fsdp.yaml" \
-#   --num_processes ${num_processes} \
-#   --num_machines ${num_nodes} \
-#   --main_process_ip ${head_node_ip} \
-#   --main_process_port ${port} \
-#   src/train_bash.py \
-#   --stage prune \
-#   --model_name_or_path ${model_name_or_path} \
-#   --dataset ${dataset} \
-#   --split "train" \
-#   --prune_data_type ${prune_data_type} \
-#   --cutoff_len ${seq_len} \
-#   --output_dir ${output_dir} \
-#   --logging_steps 10 \
-#   --bf16 \
-#   --n_calibration_samples ${n_calibration_samples} \
-#   --prune_method ${prune_method} \
-#   --expert_drop_method ${expert_drop_method} \
-#   --r ${r} \
-#   --prune_model_save_path ${prune_model_save_path}
-
-# srun accelerate launch \
-#   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-#   --num_processes ${num_processes} \
-#   --num_machines ${num_nodes} \
-#   --main_process_ip ${head_node_ip} \
-#   --main_process_port ${port} \
-#   src/train_bash.py \
-#   --stage prune \
-#   --model_name_or_path ${model_name_or_path} \
-#   --dataset ${dataset} \
-#   --split "train" \
-#   --prune_data_type ${prune_data_type} \
-#   --cutoff_len ${seq_len} \
-#   --output_dir ${output_dir} \
-#   --logging_steps 10 \
-#   --bf16 \
-#   --n_calibration_samples ${n_calibration_samples} \
-#   --prune_method ${prune_method} \
-#   --expert_drop_method ${expert_drop_method} \
-#   --r ${r} \
-#   --prune_model_save_path ${prune_model_save_path}
+srun accelerate launch \
+  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --num_processes ${num_processes} \
+  --num_machines ${num_nodes} \
+  --main_process_ip ${head_node_ip} \
+  --main_process_port ${port} \
+  src/train_bash.py \
+  --stage prune \
+  --model_name_or_path ${model_name_or_path} \
+  --dataset ${dataset} \
+  --split "train" \
+  --prune_data_type ${prune_data_type} \
+  --cutoff_len ${seq_len} \
+  --output_dir ${output_dir} \
+  --logging_steps 10 \
+  --bf16 \
+  --n_calibration_samples ${n_calibration_samples} \
+  --prune_method ${prune_method} \
+  --expert_drop_method ${expert_drop_method} \
+  --r ${r} \
+  --similarity_cache_file ${similarity_cache_file} \
+  --prune_model_save_path ${prune_model_save_path}
 
 expert_drop_method="post_dropping"
 srun accelerate launch \

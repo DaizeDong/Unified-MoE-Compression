@@ -1,7 +1,7 @@
 import sys
 import os
 
-sys.path = [os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "/mnt/petrelfs/dongdaize.d/workspace/compression/src"] + sys.path
+sys.path = sys.path + [os.path.abspath(os.path.dirname(os.path.dirname(__file__)))]
 
 print(sys.path)
 

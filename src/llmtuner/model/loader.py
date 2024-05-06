@@ -1,10 +1,11 @@
 from trl import AutoModelForCausalLMWithValueHead
 from typing import TYPE_CHECKING, Optional, Tuple
-from pathlib import Path
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 from transformers.integrations import is_deepspeed_zero3_enabled
 from .adapter import init_adapter
+from .deepseek.configuration_deepseek import DeepseekConfig
+from .deepseek.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 from .patcher import patch_config, patch_model, patch_tokenizer, patch_valuehead_model
 from .utils import load_valuehead_params, register_autoclass
 from ..extras.logging import get_logger
@@ -13,6 +14,13 @@ from ..extras.misc import count_parameters, get_current_device, try_download_mod
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
     from ..hparams import FinetuningArguments, ModelArguments
+
+# 🔍🔍🔍
+from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
+
+AutoConfig.register("deepseek", DeepseekConfig)
+AutoModel.register(DeepseekConfig, DeepseekModel)
+AutoModelForCausalLM.register(DeepseekConfig, DeepseekForCausalLM)
 
 logger = get_logger(__name__)
 
@@ -87,7 +95,7 @@ def load_model_and_tokenizer(
             import sys
             sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main"] + sys.path
             from auto_gptq import AutoGPTQForCausalLM
-            
+
             model = AutoGPTQForCausalLM.from_quantized(
                 model_args.model_name_or_path,
                 trust_remote_code=False,
@@ -98,7 +106,6 @@ def load_model_and_tokenizer(
                 # **model_kwargs,
             )
 
-                    
     patch_model(model, tokenizer, model_args, is_trainable)
     register_autoclass(config, model, tokenizer)
 
@@ -144,8 +151,8 @@ def load_model_and_tokenizer(
             )
     for name, module in model.named_modules():
         if hasattr(module, "sparseThreshold"):
-                module.sparseThreshold.requires_grad = True
-    
+            module.sparseThreshold.requires_grad = True
+
     return model, tokenizer
 
 

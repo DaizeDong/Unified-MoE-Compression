@@ -78,24 +78,24 @@ python awq/entry.py \
     --w_bit 4 --q_group_size 128 \
     --run_awq --dump_awq ../awq_cache/$MODEL-w4-g128.pt
 
-# evaluate the AWQ quantize model (simulated pseudo quantization)
-python awq.entry \
-    --model_path $MODEL \
-    --tasks wikitext \
-    --w_bit 4 --q_group_size 128 \
-    --load_awq ../awq_cache/$MODEL-w4-g128.pt \
-    --q_backend fake
+# # evaluate the AWQ quantize model (simulated pseudo quantization)
+# python awq.entry \
+#     --model_path $MODEL \
+#     --tasks wikitext \
+#     --w_bit 4 --q_group_size 128 \
+#     --load_awq ../awq_cache/$MODEL-w4-g128.pt \
+#     --q_backend fake
 
-# generate real quantized weights (w4)
-python awq.entry \
-    --model_path $MODEL \
-    --w_bit 4 --q_group_size 128 \
-    --load_awq ../awq_cache/$MODEL-w4-g128.pt \
-    --q_backend real --dump_quant ../quant_cache/$MODEL-w4-g128-awq.pt
+# # generate real quantized weights (w4)
+# python awq.entry \
+#     --model_path $MODEL \
+#     --w_bit 4 --q_group_size 128 \
+#     --load_awq ../awq_cache/$MODEL-w4-g128.pt \
+#     --q_backend real --dump_quant ../quant_cache/$MODEL-w4-g128-awq.pt
 
-# load and evaluate the real quantized model (smaller gpu memory usage)
-python awq.entry \
-    --model_path $MODEL \
-    --tasks wikitext \
-    --w_bit 4 --q_group_size 128 \
-    --load_quant ../quant_cache/$MODEL-w4-g128-awq.pt
+# # load and evaluate the real quantized model (smaller gpu memory usage)
+# python awq.entry \
+#     --model_path $MODEL \
+#     --tasks wikitext \
+#     --w_bit 4 --q_group_size 128 \
+#     --load_quant ../quant_cache/$MODEL-w4-g128-awq.pt

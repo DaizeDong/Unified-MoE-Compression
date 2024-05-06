@@ -133,6 +133,211 @@ class SparseGPTWrapper:
         self.H += input.matmul(input.t())  # update mean values by adding values from new samples
 
 
+
+
+class InputStatesRecordWrapper:
+    def __init__(self, layer, layer_name="none", record_output=False):
+        self.layer = layer
+        self.layer_name = layer_name
+        self.hidden_states = []
+
+        self.record_output = record_output
+        if record_output:
+            self.output_hidden_states = []
+
+    def record(self, input, output):
+        # input: (1, seq_len, hidden_size)
+        self.hidden_states.append(input.squeeze(0).clone().cpu())
+        if self.record_output:
+            self.output_hidden_states.append(output.squeeze(0).clone().cpu())
+
+
+class WeightRecordWrapper:
+    def __init__(self, layer, layer_name="none"):
+        self.layer = layer
+        self.layer_name = layer_name
+        self.weight = None
+
+    def record(self, input, output):
+        if self.weight is None and self.layer.weight.data.shape[0] > 0:
+            # capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
+            self.weight = self.layer.weight.data.clone().cpu()
+            # print(f"record {self.layer_name}, {self.weight.data.shape}")
+
+
+# 🔍 layer drop
+class PrunableMixtralSparseMoeLayerWrapper:
+    def __init__(self, layer):
+        self.layer = layer
+        self.scores = None
+        self.nsamples = 0
+        self.top_k = layer.top_k
+        self.hidden_states = []
+        self.output_hidden_states = []
+    
+    def add_batch(self, input, output):
+        # if len(input.shape) == 2:
+        #     batch_size = 1
+        # else:
+        #     batch_size = input.shape[0]
+
+        self.hidden_states.append(input.squeeze(0).clone().cpu())
+        # if self.record_output:
+        self.output_hidden_states.append(output.squeeze(0).clone().cpu())
+
+
+        # cos_sim = F.cosine_similarity(input, output, dim=-1)  # (total_token_num)
+
+        # if self.scores is None:
+        #     self.nsamples += batch_size
+        #     self.scores = cos_sim.sum(0) / self.nsamples
+        # else:
+        #     self.scores *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
+        #     self.nsamples += batch_size
+        #     self.scores += cos_sim.sum(0) / self.nsamples  # update mean values by adding values from new samples
+
+
+# 🔍 expert drop
+class PrunableMixtralSparseMoeBlockWrapper:
+    def __init__(self, layer):
+        self.layer = layer
+        self.scores = None
+        self.nsamples = 0
+        self.top_k = layer.top_k
+        self.ana_list = []
+
+    def add_batch(self, input, router_logits):
+        if len(input.shape) == 2:
+            batch_size = 1
+        else:
+            batch_size = input.shape[0]
+
+        # Record scores
+        routing_weights = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        mask = torch.zeros_like(router_logits, device=router_logits.device)
+        mask.scatter_(-1, selected_experts, 1)
+        # print(f"routing_weights: {routing_weights}")
+
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        # routing_weights = routing_weights * mask
+        # print(f"routing_weights: {routing_weights}")
+
+        for j in range(len(routing_weights)):
+            sorted_weights, sort_indices = torch.sort(routing_weights[j], descending=True)
+            self.ana_list.append(float(sorted_weights[1] / sorted_weights[0]))
+
+        # The above code is reshaping the `router_logits` array into a 2D array with a shape of
+        # `(batch_size * seq_len, n_experts)`. This means that it is rearranging the elements of the
+        # `router_logits` array into a new shape where the first dimension is the product of
+        # `batch_size` and `seq_len`, and the second dimension is `n_experts`.
+        # print("routing_weights", routing_weights.shape)
+
+        if self.scores is None:
+            self.nsamples += batch_size
+            self.scores = routing_weights.float().sum(0) / self.nsamples
+
+        else:
+            self.scores *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
+            self.nsamples += batch_size
+            self.scores += routing_weights.float().sum(0) / self.nsamples  # update mean values by adding values from new samples
+
+
+class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
+    def __init__(self, model, beta: float):
+        super().__init__()
+        assert model.top_k == 2
+        self.hidden_dim = model.hidden_dim
+        self.ffn_dim = model.ffn_dim
+        self.num_experts = model.num_experts
+        self.top_k = model.top_k
+        self.gate = model.gate
+        self.experts = model.experts
+
+        self.beta = beta
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """ """
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states)
+
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+
+        # 🔍 skip the experts with too low scores (batch * sequence_length)
+        mask_top1 = (routing_weights[:, 1] < self.beta * routing_weights[:, 0])
+        routing_weights[mask_top1, 1] = 0
+
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
+
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        # (batch * sequence_length, self.top_k, n_experts)
+        expert_mask = torch.nn.functional.one_hot(
+            selected_experts, num_classes=self.num_experts)
+
+        expert_mask[mask_top1, 1, :] = 0
+        expert_mask = expert_mask.permute(2, 1, 0)
+
+        # Loop over all available experts in the model and perform the computation on each expert
+        for expert_idx in range(self.num_experts):
+            expert_layer = self.experts[expert_idx]
+            top_x, indices = torch.where(expert_mask[expert_idx])
+
+            if indices.shape[0] == 0:
+                continue
+
+            # in torch it is faster to index using lists than torch tensors
+            indices_list = indices.tolist()
+            top_x_list = top_x.tolist()
+
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None,
+            indices_list].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(
+                current_state, routing_weights[indices_list, top_x_list, None])
+
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
+            final_hidden_states.index_add_(
+                0, indices, current_hidden_states.to(hidden_states.dtype))
+        final_hidden_states = final_hidden_states.reshape(
+            batch_size, sequence_length, hidden_dim)
+        return final_hidden_states, router_logits
+
+
+class GateRemapWrapper:
+    def __init__(self, layer, layer_id=0, layer_name="none", record_input=True, record_output=True):
+        self.layer = layer
+        self.device = self.layer.weight.device
+
+        self.record_input = record_input
+        self.record_output = record_output
+
+        self.inputs = []
+        self.outputs = []
+
+        self.layer_id = layer_id
+        self.layer_name = layer_name
+
+    def add_batch(self, input, output):
+        if self.record_input:
+            self.inputs.append(input.reshape(-1, input.shape[-1]).float())  # (token_num, dim)
+
+        if self.record_output:
+            self.outputs.append(output.reshape(-1, output.shape[-1]).float())  # (token_num, dim)
+
+
 # class PrunableMixtralSparseMoeBlockWrapper(nn.Module):
 #     def __init__(self, layer, r: Optional[int] = None):
 #         super().__init__()
@@ -343,173 +548,3 @@ class SparseGPTWrapper:
 #             update_state_dict[f"model.layers.{layer_id}.block_sparse_moe.experts.{new_expert_id}.w3.weight"] = model_intact.model.layers[layer_id].experts[old_expert_id].block_sparse_moe.w3.weight.data.bfloat16().cpu()
 #
 #         return update_state_dict
-
-
-class InputStatesRecordWrapper:
-    def __init__(self, layer, layer_name="none", record_output=False):
-        self.layer = layer
-        self.layer_name = layer_name
-        self.hidden_states = []
-
-        self.record_output = record_output
-        if record_output:
-            self.output_hidden_states = []
-
-    def record(self, input, output):
-        # input: (1, seq_len, hidden_size)
-        self.hidden_states.append(input.squeeze(0).clone().cpu())
-        if self.record_output:
-            self.output_hidden_states.append(output.squeeze(0).clone().cpu())
-
-
-class WeightRecordWrapper:
-    def __init__(self, layer, layer_name="none"):
-        self.layer = layer
-        self.layer_name = layer_name
-        self.weight = None
-
-    def record(self, input, output):
-        if self.weight is None and self.layer.weight.data.shape[0] > 0:
-            # capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
-            self.weight = self.layer.weight.data.clone().cpu()
-            # print(f"record {self.layer_name}, {self.weight.data.shape}")
-
-
-class PrunableMixtralSparseMoeBlockWrapper:
-    def __init__(self, layer):
-        self.layer = layer
-        self.scores = None
-        self.nsamples = 0
-        self.top_k = layer.top_k
-        self.ana_list = []
-
-    def add_batch(self, input, router_logits):
-        if len(input.shape) == 2:
-            batch_size = 1
-        else:
-            batch_size = input.shape[0]
-
-        # Record scores
-        routing_weights = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        mask = torch.zeros_like(router_logits, device=router_logits.device)
-        mask.scatter_(-1, selected_experts, 1)
-        # print(f"routing_weights: {routing_weights}")
-
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        # routing_weights = routing_weights * mask
-        # print(f"routing_weights: {routing_weights}")
-
-        for j in range(len(routing_weights)):
-            sorted_weights, sort_indices = torch.sort(routing_weights[j], descending=True)
-            self.ana_list.append(float(sorted_weights[1] / sorted_weights[0]))
-
-        # The above code is reshaping the `router_logits` array into a 2D array with a shape of
-        # `(batch_size * seq_len, n_experts)`. This means that it is rearranging the elements of the
-        # `router_logits` array into a new shape where the first dimension is the product of
-        # `batch_size` and `seq_len`, and the second dimension is `n_experts`.
-        # print("routing_weights", routing_weights.shape)
-
-        if self.scores is None:
-            self.nsamples += batch_size
-            self.scores = routing_weights.float().sum(0) / self.nsamples
-
-        else:
-            self.scores *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
-            self.nsamples += batch_size
-            self.scores += routing_weights.float().sum(0) / self.nsamples  # update mean values by adding values from new samples
-
-
-class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
-    def __init__(self, model, beta: float):
-        super().__init__()
-        assert model.top_k == 2
-        self.hidden_dim = model.hidden_dim
-        self.ffn_dim = model.ffn_dim
-        self.num_experts = model.num_experts
-        self.top_k = model.top_k
-        self.gate = model.gate
-        self.experts = model.experts
-
-        self.beta = beta
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """ """
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states)
-
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-
-        # 🔍 skip the experts with too low scores (batch * sequence_length)
-        mask_top1 = (routing_weights[:, 1] < self.beta * routing_weights[:, 0])
-        routing_weights[mask_top1, 1] = 0
-
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
-
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        # (batch * sequence_length, self.top_k, n_experts)
-        expert_mask = torch.nn.functional.one_hot(
-            selected_experts, num_classes=self.num_experts)
-
-        expert_mask[mask_top1, 1, :] = 0
-        expert_mask = expert_mask.permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            expert_layer = self.experts[expert_idx]
-            top_x, indices = torch.where(expert_mask[expert_idx])
-
-            if indices.shape[0] == 0:
-                continue
-
-            # in torch it is faster to index using lists than torch tensors
-            indices_list = indices.tolist()
-            top_x_list = top_x.tolist()
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None,
-            indices_list].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(
-                current_state, routing_weights[indices_list, top_x_list, None])
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(
-                0, indices, current_hidden_states.to(hidden_states.dtype))
-        final_hidden_states = final_hidden_states.reshape(
-            batch_size, sequence_length, hidden_dim)
-        return final_hidden_states, router_logits
-
-
-class GateRemapWrapper:
-    def __init__(self, layer, layer_id=0, layer_name="none", record_input=True, record_output=True):
-        self.layer = layer
-        self.device = self.layer.weight.device
-
-        self.record_input = record_input
-        self.record_output = record_output
-
-        self.inputs = []
-        self.outputs = []
-
-        self.layer_id = layer_id
-        self.layer_name = layer_name
-
-    def add_batch(self, input, output):
-        if self.record_input:
-            self.inputs.append(input.reshape(-1, input.shape[-1]).float())  # (token_num, dim)
-
-        if self.record_output:
-            self.outputs.append(output.reshape(-1, output.shape[-1]).float())  # (token_num, dim)

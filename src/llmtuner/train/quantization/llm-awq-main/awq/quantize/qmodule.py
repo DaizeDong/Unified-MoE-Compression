@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-import awq_inference_engine  # with CUDA kernels
+# import awq_inference_engine  # with CUDA kernels
 
 
 def make_divisible(c, divisor):
