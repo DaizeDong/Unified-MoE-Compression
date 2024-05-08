@@ -7,7 +7,6 @@ from torch import nn as nn
 import transformers
 from transformers.models.mixtral.modeling_mixtral import ExpertLinear
 
-# from data import CacheDataset
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +49,14 @@ class WandaWrapper:
     def add_batch(self, input, output, routing_scores=None):
         # 🔍 rescale with scores
         if isinstance(self.layer, ExpertLinear):
-            if self.multiply_score:
-                # multiple routing_scores to inputs
-                routing_scores = (routing_scores ** (self.p / 2))  # dividing 2 as the latter "scaler_row" will calculate the squared value
-                input = input * routing_scores
-            else:
-                # add routing_scores to memory
-                self.add_scores(routing_scores)
+            if routing_scores is not None:
+                if self.multiply_score:
+                    # multiple routing_scores to inputs
+                    routing_scores = (routing_scores ** (self.p / 2))  # dividing 2 as the latter "scaler_row" will calculate the squared value
+                    input = input * routing_scores
+                else:
+                    # add routing_scores to memory
+                    self.add_scores(routing_scores)
 
         self.add_batch_no_score(input, output)
 

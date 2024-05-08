@@ -172,3 +172,5 @@ cache/
 /results_analysis/
 /results_sft/
 /logs_sft/
+/logs_quantization/
+/models/

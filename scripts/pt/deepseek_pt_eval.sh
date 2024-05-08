@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=sparsegpt
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --job-name=eval
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_pt/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_pt/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
@@ -12,6 +12,9 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
 #SBATCH --quotatype=auto
+
+# SBATCH --quotatype=reserved
+# SBATCH --quotatype=spot
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -62,63 +65,23 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-#dataset="lima"
-#prune_data_type="sft"
+#model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
+#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/DeepSeek
 
-#dataset="wikitext"
-#prune_data_type="pt"
+folder_name="DeepSeek-wanda-c4_train-2:4-0.5-1024-NoAttn"
+model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}/checkpoint
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+use_fast_tokenizer="True"
 
-dataset="c4_train"
-prune_data_type="pt"
-
-n_calibration_samples=128
-seq_len=2048
-sparsity_ratio=0.5
-
-prune_method="sparsegpt"
-#sparsity_type="unstructured"
-#sparsity_type="4:8"
-sparsity_type="2:4"
-
-model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
-prune_model_save_path=${output_dir}/checkpoint
+#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+dataset=alpaca-gpt4_de
+#dataset=c4_valid
 
 source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
 srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage prune \
-  --model_name_or_path ${model_name_or_path} \
-  --dataset ${dataset} \
-  --split "train" \
-  --prune_data_type ${prune_data_type} \
-  --cutoff_len ${seq_len} \
-  --output_dir ${output_dir} \
-  --logging_steps 10 \
-  --bf16 \
-  --n_calibration_samples ${n_calibration_samples} \
-  --sparsity_ratio ${sparsity_ratio} \
-  --prune_method ${prune_method} \
-  --sparsity_type ${sparsity_type} \
-  --prune_model_save_path ${prune_model_save_path}
-
-##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
-
-srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/deepseek_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
@@ -126,7 +89,8 @@ srun accelerate launch \
   src/train_bash.py \
   --stage pt \
   --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
+  --model_name_or_path ${model_name_or_path} \
+  --use_fast_tokenizer ${use_fast_tokenizer} \
   --dataset ${dataset} \
   --finetuning_type full \
   --output_dir ${output_dir} \

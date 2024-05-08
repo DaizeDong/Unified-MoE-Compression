@@ -1,7 +1,8 @@
 import torch
 from torch import nn as nn, cuda
 
-from transformers.models.mixtral.modeling_mixtral import ExpertLinear
+from llmtuner.model.deepseek.modeling_deepseek import MoEGate
+from llmtuner.model.pruning_modules import ExpertLinear
 
 
 def print_gpu_memory(accelerator):
@@ -39,33 +40,26 @@ def find_modules(module, layers=[], name='') -> dict:
     return res
 
 
-def find_moe_expert_linears_and_gate(module, layers=[nn.Linear, ExpertLinear], name='') -> dict:
-    # 🔍 find the expert weights and gate weights
-    res = find_modules(module, layers, name)
-    for key in list(res.keys()):
-        if 'self_attn' in key:
-            res.pop(key)
-    return res
-
-
-def find_moe_expert_linears(module, layers=[nn.Linear, ExpertLinear], name='') -> dict:
+def find_moe_expert_linears(module) -> dict:
     # 🔍 find only the expert weights
-    res = find_modules(module, layers, name)
-    for key in list(res.keys()):
-        if "gate" in key:
-            res.pop(key)
-        if 'self_attn' in key:
-            res.pop(key)
+    res = find_modules(module, [ExpertLinear])
     return res
 
 
-def find_moe_gates(module, layers=[nn.Linear], name='') -> dict:
+def find_moe_gates(module) -> dict:
     # 🔍 find only the gate network
-    res = find_modules(module, layers, name)
+    res = find_modules(module, [nn.Linear, MoEGate])  # MoEGate for DeepSeek
     for key in list(res.keys()):
-        if "gate" not in key:
+        if ".gate." not in key:
             res.pop(key)
     return res
+
+
+def find_moe_expert_linears_and_gate(module) -> dict:
+    # 🔍 find the expert weights and gate weights
+    res_experts = find_moe_expert_linears(module)
+    res_gates = find_moe_gates(module)
+    return {**res_experts, **res_gates}  # merge the two dict
 
 
 @torch.no_grad()
@@ -105,6 +99,7 @@ def check_sparsity_from_state_dict(state_dict):
     layer_params = {}
     for name in sorted(list(state_dict.keys())):
         # Example: model.layers.5.block_sparse_moe.experts.2.w3.weight
+        # Example: model.layers.13.mlp.experts.28.up_proj
         # print(f"name: {name}")
 
         if "layers" in name:

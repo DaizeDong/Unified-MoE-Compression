@@ -39,8 +39,8 @@ def save_sparse_model(prune_model_save_path, model, tokenizer, accelerator: Acce
         accelerator.print(f"State dict stored in CPU on process {accelerator.process_index}")
 
         # update state dict
-        accelerator.print("save_state_dict", list(save_state_dict.keys()))
-        accelerator.print("update_state_dict", list(update_state_dict.keys()))
+        # accelerator.print("save_state_dict", list(save_state_dict.keys()))
+        # accelerator.print("update_state_dict", list(update_state_dict.keys()))
 
         for name, param in save_state_dict.items():
             if name in update_state_dict:

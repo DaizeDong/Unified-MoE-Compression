@@ -28,8 +28,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from typing import List, Optional, Tuple, Union
 
+from llmtuner.model.pruning_modules import ExpertLinear, LoSparseLinear, GateLinear
 from .configuration_mixtral import MixtralConfig
-from .sparse import LoSparseLinear
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
@@ -785,14 +785,6 @@ MIXTRAL_ATTENTION_CLASSES = {
 }
 
 
-class ExpertLinear(nn.Linear):
-    """This is for wanda pruning. (forward with scores for hooks to capture)"""
-
-    def forward(self, input: torch.Tensor, routing_scores: torch.Tensor) -> torch.Tensor:
-        # print(f"input: {input.size()}, weight: {self.weight.size()}")
-        return super().forward(input)
-
-
 class MixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: MixtralConfig, layer_index: int, expert_index: int) -> None:
         super().__init__()
@@ -841,8 +833,9 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         current_hidden_states = self.w2(current_hidden_states, routing_scores)
         return current_hidden_states
 
+
 class DynamicMixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
-    
+
     def forward(self, hidden_states):
         # 🔍 The vanilla version.
         current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
@@ -851,8 +844,8 @@ class DynamicMixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
         # called `w2`. The result of this function call is then assigned back to the variable
         # `current_hidden_states`.
         return current_hidden_states
-        
-        
+
+
 class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -883,13 +876,12 @@ class MixtralSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok if (config.num_experts_per_tok <= self.num_experts) else self.num_experts
 
         # gating
-        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.gate = GateLinear(self.hidden_dim, self.num_experts, bias=False)  # 🔍
         expert_layer = MixtralBlockSparseTop2MLP if mode == "static" else DynamicMixtralBLockSparseTop2MLP
         self.experts = nn.ModuleList([expert_layer(config, layer_index=layer_index, expert_index=i) for i in range(self.num_experts)])
 
         # 🔍 for pruning only, doesn't affect the forward results
         self.temperature = 1.0
-
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
@@ -965,11 +957,18 @@ class MixtralDecoderLayer(nn.Module):
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         mode = getattr(config, "mode", "static")
         # mode = getattr(config, "mode", "dynamic")
-        self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_index=layer_idx, mode=mode)
-        if mode == "dynamic":
-            self.delta = getattr(config, "layer_deltas")[layer_idx] if hasattr(config, "layer_deltas") else 0.
-            self.block_sparse_moe = DynamicSkippingMixtralSparseMoeBlockWrapper(self.block_sparse_moe, self.delta)
+        num_experts = config.num_local_experts if isinstance(config.num_local_experts, int) else config.num_local_experts[layer_idx]
+        if hasattr(config, "layer_experts_idx"):
+            num_experts = config.layer_experts_idx[layer_idx]
+        if num_experts != 0:
+            self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_index=layer_idx, mode=mode)
+            if mode == "dynamic":
+                self.delta = getattr(config, "layer_deltas")[layer_idx] if hasattr(config, "layer_deltas") else 0.
+                self.block_sparse_moe = DynamicSkippingMixtralSparseMoeBlockWrapper(self.block_sparse_moe, self.delta)
 
+        else:
+            self.block_sparse_moe = None
+            
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1023,7 +1022,9 @@ class MixtralDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+        router_logits = None    
+        if self.block_sparse_moe is not None:
+            hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -1712,8 +1713,8 @@ class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         # routing_weights: (batch * sequence_length, top_k)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        
-        onlytop1_mask = routing_weights[:, 1] < self.beta * routing_weights[:, 0]# bz x seqlen
+
+        onlytop1_mask = routing_weights[:, 1] < self.beta * routing_weights[:, 0]  # bz x seqlen
 
         # 🔍 skip the experts with too low scores (batch * sequence_length)
         # mask_top1 = (routing_weights[:, 1] < self.beta * routing_weights[:, 0])
@@ -1731,7 +1732,7 @@ class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
         # routing_weights = routing_weights * mask
         routing_weights[onlytop1_mask, 1] = 0
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        
+
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
@@ -1748,7 +1749,7 @@ class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
         expert_mask[onlytop1_mask, 1, :] = 0
         expert_mask = expert_mask.permute(2, 1, 0)
         # print(f"expert_mask: {expert_mask}")
-        
+
         # Loop over all available experts in the model and perform the computation on each expert
         for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
@@ -1778,12 +1779,11 @@ class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
 
-
 #     def initialize_sInit(self):
 #         # if parser_args.sInit_type == "constant":
 #         # return parser_args.sInit_value*torch.ones([1, 1])
 #         return self.sInit_value * torch.ones([1, 1], dtype=torch.bfloat16)
-    
+
 # def sparseFunction(x, s, activation=torch.relu, f=torch.sigmoid):
 #     return activation(x - f(s.detach()))
 
@@ -1811,7 +1811,7 @@ class DynamicSkippingMixtralSparseMoeBlockWrapper(nn.Module):
 
 #         # gating
 #         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-        
+
 #         expert_layer = MixtralBlockSparseTop2MLP if mode == "static" else DynamicMixtralBLockSparseTop2MLP
 #         self.experts = nn.ModuleList([expert_layer(config, layer_index=layer_index, expert_index=i) for i in range(self.num_experts)])
 

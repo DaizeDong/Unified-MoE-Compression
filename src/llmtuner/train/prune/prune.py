@@ -418,39 +418,37 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
         torch.cuda.empty_cache()
         print_gpu_memory(accelerator)
         layer = layers[i]
-        subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
+        subset_experts = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
 
         # Wrap layers
         wrapped_layers = {}
-        for name in subset:
-            wrapped_layers[name] = WandaWrapper(subset[name], layer_name=name, multiply_score=False, p=1)  # 🔍
+        for name in subset_experts:
+            wrapped_layers[name] = WandaWrapper(subset_experts[name], layer_name=name, multiply_score=False, p=1)  # 🔍
 
         # Forward hook for recording row importance
-        def add_batch(name):
+        def add_batch_linear(name):
             def hook(_, input, output):
                 wrapped_layers[name].add_batch_no_score(input[0].data, output.data)
 
-            def moe_hook(_, input, output):
-                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data)  # 🔍 input[1] is routing scores.
+            return hook
 
-            if 'experts' in name:
-                return moe_hook
-            else:
-                return hook
+        def add_batch_experts(name):
+            def hook(_, input, output):
+                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if input[1] is not None else None)  # 🔍 input[1] is routing scores.
 
-            # accelerator.print(f'subset: {subset}')
+            return hook
 
         # Get importance
         handles = []
         for name in wrapped_layers:
-            handles.append(subset[name].register_forward_hook(add_batch(name)))
+            handles.append(subset_experts[name].register_forward_hook(add_batch_experts(name)))
         for j in range(num_samples):
             outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
         for h in handles:
             h.remove()
 
         # 🔍 Prune
-        for name in subset:  # 🔍semi-structured
+        for name in subset_experts:  # 🔍semi-structured
             module_state_dict_name = f"model.layers.{i}.{name}"
             accelerator.print(f"Pruning module {module_state_dict_name}")
             W = wrapped_layers[name].weight.data.to(device)  # 👆 use the captured weights

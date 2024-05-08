@@ -140,13 +140,15 @@ def post_layers_drop(model, layer_experts_idx, accelerator):
     for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping Experts...'):
         experts = layer_experts_idx[layer_id]
         if experts == 0:
-            experts_to_preserve = []
-            new_gate_weight = layer.block_sparse_moe.gate.weight.data[list(experts_to_preserve)]
-            layer.block_sparse_moe.gate = torch.nn.Linear(in_features=layer.block_sparse_moe.gate.in_features, out_features=len(experts_to_preserve), bias=False, device=layer.block_sparse_moe.gate.weight.device, dtype=torch.bfloat16)
-            layer.block_sparse_moe.gate.weight.data = new_gate_weight
-            # 🔍 drop experts.
-            layer.block_sparse_moe.experts = torch.nn.ModuleList([layer.block_sparse_moe.experts[i] for i in experts_to_preserve])
-            layer.num_experts = 0
+            del layer.block_sparse_moe
+            layer.block_sparse_moe = None
+            # experts_to_preserve = []
+            # new_gate_weight = layer.block_sparse_moe.gate.weight.data[list(experts_to_preserve)]
+            # layer.block_sparse_moe.gate = torch.nn.Linear(in_features=layer.block_sparse_moe.gate.in_features, out_features=len(experts_to_preserve), bias=False, device=layer.block_sparse_moe.gate.weight.device, dtype=torch.bfloat16)
+            # layer.block_sparse_moe.gate.weight.data = new_gate_weight
+            # # 🔍 drop experts.
+            # layer.block_sparse_moe.experts = torch.nn.ModuleList([layer.block_sparse_moe.experts[i] for i in experts_to_preserve])
+            # layer.num_experts = 0
 
     unwrapped_model.config.num_local_experts = layer_experts_idx
 

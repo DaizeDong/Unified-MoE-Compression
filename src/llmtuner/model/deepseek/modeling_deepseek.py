@@ -19,14 +19,13 @@
 # limitations under the License.
 """ PyTorch DeepSeek model."""
 import math
-import warnings
-from typing import List, Optional, Tuple, Union
-
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import warnings
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from typing import List, Optional, Tuple, Union
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -49,6 +48,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import is_torch_fx_available
 from .configuration_deepseek import DeepseekConfig
+from ..pruning_modules import ExpertLinear
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -245,21 +245,20 @@ class DeepseekMLP(nn.Module):
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
 
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = ExpertLinear(self.hidden_size, self.intermediate_size, bias=False)  # 🔍
+        self.up_proj = ExpertLinear(self.hidden_size, self.intermediate_size, bias=False)  # 🔍
+        self.down_proj = ExpertLinear(self.intermediate_size, self.hidden_size, bias=False)  # 🔍
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, x, routing_scores=None):
         if self.config.pretraining_tp > 1:
+            # 🔍 TODO: tp support
             slice = self.intermediate_size // self.config.pretraining_tp
             gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
             up_proj_slices = self.up_proj.weight.split(slice, dim=0)
             down_proj_slices = self.down_proj.weight.split(slice, dim=1)
 
-            gate_proj = torch.cat(
-                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
-            )
+            gate_proj = torch.cat([F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
             up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
 
             intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
@@ -268,7 +267,8 @@ class DeepseekMLP(nn.Module):
             ]
             down_proj = sum(down_proj)
         else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            # 🔍 forward with routing scores for capturing
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x, routing_scores)) * self.up_proj(x, routing_scores), routing_scores)
 
         return down_proj
 
@@ -373,14 +373,15 @@ class DeepseekMoE(nn.Module):
     def forward(self, hidden_states):
         identity = hidden_states
         orig_shape = hidden_states.shape
-        topk_idx, topk_weight, aux_loss = self.gate(hidden_states)
+        topk_idx, topk_weight, aux_loss = self.gate(hidden_states)  # topk_weight: shape(batch_size * seq_len, num_experts)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         flat_topk_idx = topk_idx.view(-1)
         if self.training:
             hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
             y = torch.empty_like(hidden_states)
             for i, expert in enumerate(self.experts):
-                y[flat_topk_idx == i] = expert(hidden_states[flat_topk_idx == i])
+                select_mask = (flat_topk_idx == i)
+                y[select_mask] = expert(hidden_states[select_mask], topk_weight[select_mask])  # 🔍
             y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
             y = y.view(*orig_shape)
             y = AddAuxiliaryLoss.apply(y, aux_loss)
@@ -900,9 +901,7 @@ class DeepseekDecoderLayer(nn.Module):
 
         self.self_attn = Deepseek_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
-        self.mlp = DeepseekMoE(config) if (config.n_routed_experts is not None and \
-                                           layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0) \
-            else DeepseekMLP(config)
+        self.mlp = DeepseekMoE(config) if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0) else DeepseekMLP(config)
         self.input_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=block
+#SBATCH --job-name=wanda
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
@@ -10,12 +10,13 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:4
+# SBATCH --quotatype=spot
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=8 # should match with --gres
+num_gpu_per_node=4 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -62,22 +63,29 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
+#dataset="lima"
+#prune_data_type="sft"
+
+#dataset="wikitext"
+#prune_data_type="pt"
+
 dataset="c4_train"
 prune_data_type="pt"
 
 n_calibration_samples=1024
-n_calibration_samples=10000
-
 seq_len=2048
+sparsity_ratio=0.5
 
-prune_method="block_drop"
-block_drop_method="consecutive"
-#block_drop_method="discrete"
-drop_n=4
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-block-${dataset}-${n_calibration_samples}samples.pt"
+prune_method="wanda"
 
-model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-folder_name="Mixtral-${prune_method}-${block_drop_method}-drop${drop_n}"
+sparsity_type="unstructured"
+#sparsity_type="4:8"
+#sparsity_type="2:4"
+#sparsity_type="structured"
+
+model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
+folder_name="DeepSeek-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
+use_fast_tokenizer="True"
 echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
@@ -87,7 +95,7 @@ source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
 srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/deepseek_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
@@ -95,6 +103,7 @@ srun accelerate launch \
   src/train_bash.py \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
+  --use_fast_tokenizer ${use_fast_tokenizer} \
   --dataset ${dataset} \
   --split "train" \
   --prune_data_type ${prune_data_type} \
@@ -103,36 +112,9 @@ srun accelerate launch \
   --logging_steps 10 \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
+  --sparsity_ratio ${sparsity_ratio} \
   --prune_method ${prune_method} \
-  --block_drop_method ${block_drop_method} \
-  --drop_n ${drop_n} \
-  --similarity_cache_file ${similarity_cache_file} \
-  --prune_model_save_path ${prune_model_save_path}
-
-# Save the converted the model without DeepSpeed
-block_drop_method="post_dropping"
-
-srun accelerate launch \
-  --config_file "config/accelerate/mixtral_normal.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage prune \
-  --model_name_or_path ${model_name_or_path} \
-  --dataset ${dataset} \
-  --split "train" \
-  --prune_data_type ${prune_data_type} \
-  --cutoff_len ${seq_len} \
-  --output_dir ${output_dir} \
-  --logging_steps 10 \
-  --bf16 \
-  --n_calibration_samples ${n_calibration_samples} \
-  --prune_method ${prune_method} \
-  --block_drop_method ${block_drop_method} \
-  --drop_n ${drop_n} \
-  --similarity_cache_file ${similarity_cache_file} \
+  --sparsity_type ${sparsity_type} \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
@@ -143,7 +125,7 @@ output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_n
 dataset=alpaca-gpt4_de
 
 srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/deepseek_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
@@ -152,13 +134,15 @@ srun accelerate launch \
   --stage pt \
   --do_eval \
   --model_name_or_path ${prune_model_save_path} \
+  --use_fast_tokenizer ${use_fast_tokenizer} \
   --dataset ${dataset} \
   --finetuning_type full \
   --output_dir ${output_dir} \
   --per_device_train_batch_size 4 \
   --logging_steps 10 \
   --plot_loss \
-  --bf16 \
-  --print_param_status
+  --bf16
+
+#  --print_param_status \
 
 # rm -rf ${prune_model_save_path}
