@@ -1,13 +1,15 @@
+from typing import Tuple, List
+
 import torch
 import torch.nn as nn
-from typing import Tuple, List
-from awq.utils.utils import get_best_device
 from awq.modules.act import ScaledActivation
 from awq.utils.module import get_op_by_name, set_op_by_name
-from transformers.models.bloom.modeling_bloom import BloomGelu
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
-from transformers.models.gemma.modeling_gemma import GemmaRMSNorm
+from awq.utils.utils import get_best_device
+
 from transformers.activations import NewGELUActivation, PytorchGELUTanh, GELUActivation
+from transformers.models.bloom.modeling_bloom import BloomGelu
+from transformers.models.gemma.modeling_gemma import GemmaRMSNorm
+from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 allowed_norms = [nn.LayerNorm, LlamaRMSNorm, GemmaRMSNorm]
 allowed_act_fns = [
@@ -44,9 +46,9 @@ def apply_scale(module, scales_list, input_feat_dict=None):
         scales.to(best_device)
 
         if (
-            isinstance(prev_op, nn.Linear)
-            and type(layers) == list
-            and isinstance(layers[0], nn.Linear)
+                isinstance(prev_op, nn.Linear)
+                and type(layers) == list
+                and isinstance(layers[0], nn.Linear)
         ):
             scale_fc_fcs(prev_op, layers, scales)
 
@@ -55,8 +57,8 @@ def apply_scale(module, scales_list, input_feat_dict=None):
             scale_fc_fc(prev_op, layers[0], scales)
 
         elif (
-            any(isinstance(prev_op, t) for t in allowed_norms)
-            or "rmsnorm" in str(prev_op.__class__).lower()
+                any(isinstance(prev_op, t) for t in allowed_norms)
+                or "rmsnorm" in str(prev_op.__class__).lower()
         ):
             scale_ln_fcs(prev_op, layers, scales)
 
@@ -118,7 +120,7 @@ def scale_fc_fc(fc1: nn.Linear, fc2: nn.Linear, scales: torch.Tensor):
 
     scales = scales.to(fc1.weight.device)
 
-    fc1.weight[-scales.size(0) :].div_(scales.view(-1, 1))
+    fc1.weight[-scales.size(0):].div_(scales.view(-1, 1))
     if fc1.bias is not None:
         fc1.bias.div_(scales.view(-1))
 
@@ -137,7 +139,7 @@ def scale_fc_fcs(fc1: nn.Linear, fcs: List[nn.Linear], scales: torch.Tensor):
 
     scales = scales.to(fc1.weight.device)
 
-    fc1.weight[-scales.size(0) :].div_(scales.view(-1, 1))
+    fc1.weight[-scales.size(0):].div_(scales.view(-1, 1))
     if fc1.bias is not None:
         fc1.bias.div_(scales.view(-1))
 

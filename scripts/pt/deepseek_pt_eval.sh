@@ -6,11 +6,11 @@
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:1
 #SBATCH --quotatype=auto
 
 # SBATCH --quotatype=reserved
@@ -18,7 +18,7 @@
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=4 # should match with --gres
+num_gpu_per_node=1 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -68,7 +68,9 @@ echo "Total GPUs: $num_processes"
 #model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 #output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/DeepSeek
 
-folder_name="DeepSeek-wanda-c4_train-2:4-0.5-1024-NoAttn"
+#folder_name="DeepSeek-wanda-c4_train-2:4-0.5-1024-NoAttn"
+folder_name="DeepSeek-layer_drop-discrete-drop4"
+
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}/checkpoint
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
 use_fast_tokenizer="True"

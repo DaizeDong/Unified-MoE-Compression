@@ -10,12 +10,12 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:2
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=8 # should match with --gres
+num_gpu_per_node=2 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -65,9 +65,9 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
+#n_calibration_samples=128
 n_calibration_samples=1024
-n_calibration_samples=10000
-
+#n_calibration_samples=10000
 seq_len=2048
 
 prune_method="block_drop"
@@ -109,9 +109,7 @@ srun accelerate launch \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-# Save the converted the model without DeepSpeed
 block_drop_method="post_dropping"
-
 srun accelerate launch \
   --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \

@@ -1,8 +1,10 @@
-import os
 import logging
-from transformers import AutoConfig
+import os
+
 from awq.models import *
 from awq.models.base import BaseAWQForCausalLM
+
+from transformers import AutoConfig
 
 AWQ_CAUSAL_LM_MODEL_MAP = {
     "mpt": MptAWQForCausalLM,
@@ -48,13 +50,13 @@ class AutoAWQForCausalLM:
 
     @classmethod
     def from_pretrained(
-        self,
-        model_path,
-        trust_remote_code=True,
-        safetensors=True,
-        device_map=None,
-        download_kwargs=None,
-        **model_init_kwargs,
+            self,
+            model_path,
+            trust_remote_code=True,
+            safetensors=True,
+            device_map=None,
+            download_kwargs=None,
+            **model_init_kwargs,
     ) -> BaseAWQForCausalLM:
         model_type = check_and_get_model_type(
             model_path, trust_remote_code, **model_init_kwargs
@@ -72,20 +74,20 @@ class AutoAWQForCausalLM:
 
     @classmethod
     def from_quantized(
-        self,
-        quant_path,
-        quant_filename="",
-        max_seq_len=2048,
-        trust_remote_code=True,
-        fuse_layers=True,
-        use_exllama=False,
-        use_exllama_v2=False,
-        batch_size=1,
-        safetensors=True,
-        device_map="balanced",
-        offload_folder=None,
-        download_kwargs=None,
-        **config_kwargs,
+            self,
+            quant_path,
+            quant_filename="",
+            max_seq_len=2048,
+            trust_remote_code=True,
+            fuse_layers=True,
+            use_exllama=False,
+            use_exllama_v2=False,
+            batch_size=1,
+            safetensors=True,
+            device_map="balanced",
+            offload_folder=None,
+            download_kwargs=None,
+            **config_kwargs,
     ) -> BaseAWQForCausalLM:
         os.environ["AWQ_BATCH_SIZE"] = str(batch_size)
         model_type = check_and_get_model_type(quant_path, trust_remote_code)

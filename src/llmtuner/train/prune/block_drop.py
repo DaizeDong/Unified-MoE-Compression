@@ -1,25 +1,28 @@
 import logging
 import math
 import os
+import sys
+from argparse import Namespace
+from copy import deepcopy
+
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
-from argparse import Namespace
-from copy import deepcopy
 from torch import no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from global_utils.io import create_dir
+from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 from llmtuner.train.prune.utils import prepare_calibration_input, print_gpu_memory
-from llmtuner.train.prune.wrapper import InputStatesRecordWrapper
-from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM
+from llmtuner.train.prune.wrapper import HiddenStatesRecordWrapper
+from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
 
 logger = logging.getLogger(__name__)
 
 
 @no_grad()
-def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int, cache_file=None):
+def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int, cache_file=None):
     device = accelerator.device
 
     if cache_file is not None and os.path.exists(cache_file):
@@ -37,6 +40,12 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
         accelerator.print("Getting features...")
         inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
 
+        # 🔍 Get MoE layer ids
+        if isinstance(unwrapped_model, MixtralPreTrainedModel):
+            num_layers = unwrapped_model.config.num_hidden_layers
+        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+            num_layers = unwrapped_model.config.num_hidden_layers
+
         # 🔍 Initialize the similarities.
         # Row: each layer
         # Column: similarity to the next n layer
@@ -51,9 +60,14 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
         accelerator.print('Starting ...')
         wrapped_layers = []
 
-        for i in tqdm(range(len(layers)), desc="Recording hidden states...", disable=not accelerator.is_main_process):
+        for i in tqdm(range(num_layers), desc="Recording hidden states...", disable=not accelerator.is_main_process):
+            sys.stderr.flush()
+            torch.cuda.empty_cache()
+            print_gpu_memory(accelerator)
             layer = layers[i]
-            wrapped_layer = InputStatesRecordWrapper(layer, record_output=i == len(layers) - 1)  # 🔍 Wrap layer
+
+            # Wrap layer
+            wrapped_layer = HiddenStatesRecordWrapper(layer, record_input=True, record_output=(i == len(layers) - 1))  # 🔍 Wrap layer
             wrapped_layers.append(wrapped_layer)
 
             # Forward hook for recording hidden states
@@ -72,7 +86,7 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
 
         all_hidden_states = []
         for i in tqdm(range(len(layers)), desc="Concatenating hidden states...", disable=not accelerator.is_main_process):
-            all_hidden_states.append(torch.cat(wrapped_layers[i].hidden_states, dim=0).to(device))  # (total_token_num, hidden_size)
+            all_hidden_states.append(torch.cat(wrapped_layers[i].input_hidden_states, dim=0).to(device))  # (total_token_num, hidden_size)
         all_hidden_states.append(torch.cat(wrapped_layers[-1].output_hidden_states, dim=0).to(device))
         accelerator.print(f'Total {len(all_hidden_states)} hidden states concatenated.')
 
@@ -101,22 +115,18 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
     return similarities
 
 
-def consecutive_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
+def consecutive_block_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
     """
     🔍 Prune blocks in a consecutive order.
     E.g., [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] -> [0, 1, 7, 8, 9]
     """
     drop_n = args.drop_n
 
-    similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
+    similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
     similarities_drop_n = similarities[:, drop_n].view(-1)
     max_similarity, begin_layer_id = torch.max(similarities_drop_n, dim=0)
     accelerator.print(f"similarities_drop_n: {similarities_drop_n}")
-    # max_similarity, begin_layer_id = torch.max(similarities, dim=0)  # 🔍 shape(layer_num)
     accelerator.print(f"max_similarity: {max_similarity}, begin_layer_id: {begin_layer_id}")
-
-    # max_similarity = max_similarity[drop_n - 1].item()
-    # begin_layer_id = begin_layer_id[drop_n - 1].item()
 
     end_layer_id = begin_layer_id + drop_n
     dropped_layer_list = [i for i in range(begin_layer_id, end_layer_id)]
@@ -125,17 +135,17 @@ def consecutive_dropping(args: Namespace, model: MixtralForCausalLM, dataloader:
     return dropped_layer_list
 
 
-def discrete_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
+def discrete_block_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
     """
     🔍 Prune blocks in a discrete order.
     E.g., [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] -> [0, 2, 6, 8, 9]
     """
     drop_n = args.drop_n
 
-    similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
+    similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
     similarities_drop_1 = similarities[:, 0].view(-1)
-    accelerator.print(f"similarities_drop_1: {similarities_drop_1}")
     sorted_similarities, sorted_layer_id = torch.sort(similarities_drop_1, dim=0, descending=True)
+    accelerator.print(f"similarities_drop_1: {similarities_drop_1}")
 
     dropped_layer_list = sorted_layer_id[:drop_n].tolist()
     accelerator.print(f"Dropped layer: {dropped_layer_list}, similarities: {sorted_similarities[:drop_n].tolist()}")

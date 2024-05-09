@@ -20,13 +20,14 @@
 """ PyTorch Mixtral model."""
 import inspect
 import math
+import warnings
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import warnings
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import List, Optional, Tuple, Union
 
 from llmtuner.model.pruning_modules import ExpertLinear, LoSparseLinear, GateLinear
 from .configuration_mixtral import MixtralConfig
@@ -955,22 +956,26 @@ class MixtralDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
 
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-        mode = getattr(config, "mode", "static")
-        # mode = getattr(config, "mode", "dynamic")
-        num_experts = config.num_local_experts if isinstance(config.num_local_experts, int) else config.num_local_experts[layer_idx]
+        self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # 🔍
         if hasattr(config, "layer_experts_idx"):
-            num_experts = config.layer_experts_idx[layer_idx]
-        if num_experts != 0:
-            self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_index=layer_idx, mode=mode)
-            if mode == "dynamic":
+            num_experts = len(config.layer_experts_idx[layer_idx])
+        else:
+            num_experts = config.num_local_experts if isinstance(config.num_local_experts, int) else config.num_local_experts[layer_idx]
+
+        # 🔍
+        if num_experts <= 0:
+            self.block_sparse_moe = None
+            self.post_attention_layernorm = None
+        else:
+            mode = getattr(config, "mode", "static")
+            if mode == "static":
+                self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_index=layer_idx, mode=mode)
+            elif mode == "dynamic":
                 self.delta = getattr(config, "layer_deltas")[layer_idx] if hasattr(config, "layer_deltas") else 0.
                 self.block_sparse_moe = DynamicSkippingMixtralSparseMoeBlockWrapper(self.block_sparse_moe, self.delta)
-
-        else:
-            self.block_sparse_moe = None
-            
-        self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
             self,
@@ -1020,12 +1025,14 @@ class MixtralDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        router_logits = None    
+        router_logits = None
+
+        if self.post_attention_layernorm is not None:
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
         if self.block_sparse_moe is not None:
             hidden_states, router_logits = self.block_sparse_moe(hidden_states)
-        hidden_states = residual + hidden_states
+            hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 

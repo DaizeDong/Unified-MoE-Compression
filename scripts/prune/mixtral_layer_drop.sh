@@ -11,8 +11,8 @@
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
-#SBATCH --quotatype=spot
-# SBATCH --quotatype=auto
+#SBATCH --quotatype=auto
+# SBATCH --quotatype=reserved
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -70,30 +70,25 @@ echo "Total GPUs: $num_processes"
 #prune_data_type="pt"
 
 dataset="c4_train"
-# dataset="MetaMathQA"
-# dataset="codealpaca"
-
 prune_data_type="pt"
 
-n_calibration_samples=16
+#n_calibration_samples=128
+n_calibration_samples=1024
 seq_len=2048
-sparsity_ratio=0.5
 
 prune_method="layer_drop"
-layer_drop_method="layer_pruning"
-# expert_drop_method="global_pruning"
+layer_drop_method="discrete"
+drop_n=4
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-folder_name="Mixtral-${prune_method}-${expert_drop_method}-s${sparsity_ratio}"
+folder_name="Mixtral-${prune_method}-${layer_drop_method}-drop${drop_n}"
+echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
 
-echo ${folder_name}
-
-# source ~/anaconda3/bin/activate compression
-conda deactivate
-source activate compression
+source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
 srun accelerate launch \
@@ -115,7 +110,8 @@ srun accelerate launch \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
   --layer_drop_method ${layer_drop_method} \
-  --sparsity_ratio ${sparsity_ratio} \
+  --drop_n ${drop_n} \
+  --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
 layer_drop_method="post_dropping"
@@ -138,36 +134,34 @@ srun accelerate launch \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
   --layer_drop_method ${layer_drop_method} \
-  --sparsity_ratio ${sparsity_ratio} \
+  --drop_n ${drop_n} \
+  --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-
-
 ##############################################################################
-# output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
 
-# #dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-# #dataset=alpaca-gpt4_de,c4_valid
-# dataset=alpaca-gpt4_de
+#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+#dataset=alpaca-gpt4_de,c4_valid
+dataset=alpaca-gpt4_de
 
-# srun accelerate launch \
-#   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-#   --num_processes ${num_processes} \
-#   --num_machines ${num_nodes} \
-#   --main_process_ip ${head_node_ip} \
-#   --main_process_port ${port} \
-#   src/train_bash.py \
-#   --stage pt \
-#   --do_eval \
-#   --model_name_or_path ${prune_model_save_path} \
-#   --dataset ${dataset} \
-#   --finetuning_type full \
-#   --output_dir ${output_dir} \
-#   --per_device_train_batch_size 4 \
-#   --logging_steps 10 \
-#   --plot_loss \
-#   --bf16 \
-#   --expert_drop_method ${expert_drop_method} \
-#   --print_param_status
+srun accelerate launch \
+  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --num_processes ${num_processes} \
+  --num_machines ${num_nodes} \
+  --main_process_ip ${head_node_ip} \
+  --main_process_port ${port} \
+  src/train_bash.py \
+  --stage pt \
+  --do_eval \
+  --model_name_or_path ${prune_model_save_path} \
+  --dataset ${dataset} \
+  --finetuning_type full \
+  --output_dir ${output_dir} \
+  --per_device_train_batch_size 4 \
+  --logging_steps 10 \
+  --plot_loss \
+  --bf16 \
+  --print_param_status
 
-# rm -rf ${prune_model_save_path}
+#rm -rf ${prune_model_save_path}

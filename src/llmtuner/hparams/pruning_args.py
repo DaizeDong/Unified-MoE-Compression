@@ -2,8 +2,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
 EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'progressive_pruning', 'dynamic_skipping', 'post_dropping')
+LAYER_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
 BLOCK_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
-LAYER_DROP_METHODS = ('layer_pruning', 'post_dropping')
 
 
 @dataclass
@@ -34,7 +34,7 @@ class PruningArguments:
     )
 
     # 🔍 For pruning
-    sparsity_ratio: Optional[float] = field(  # parameter_ratio when using decomposition
+    sparsity_ratio: Optional[float] = field(  # this term denotes the "parameter_ratio" for decomposition
         default=0.5,
         metadata={"help": "Sparsity Level."},
     )
@@ -76,24 +76,21 @@ class PruningArguments:
         metadata={"help": 'Number of experts to preserve'}
     )
 
-    # 🔍 For block drop
-    block_drop_method: Optional[str] = field(
-        default="consecutive",
-        metadata={"help": ' '.join(['Supported dropping methods:'] + list(BLOCK_DROP_METHODS)),
-                  "choices": BLOCK_DROP_METHODS},
-    )
-    
+    # 🔍 For layer drop & block drop
     layer_drop_method: Optional[str] = field(
-        default="consecutive",
+        default="discrete",
         metadata={"help": ' '.join(['Supported dropping methods:'] + list(LAYER_DROP_METHODS)),
                   "choices": LAYER_DROP_METHODS},
     )
-    
+    block_drop_method: Optional[str] = field(
+        default="discrete",
+        metadata={"help": ' '.join(['Supported dropping methods:'] + list(BLOCK_DROP_METHODS)),
+                  "choices": BLOCK_DROP_METHODS},
+    )
     drop_n: Optional[int] = field(
         default=4,
         metadata={"help": 'Number of blocks to drop'}
     )
-    
     similarity_cache_file: Optional[str] = field(
         default=None,
         metadata={"help": 'Cached file storing the similarity scores across layers to reduce the computation consumption. '

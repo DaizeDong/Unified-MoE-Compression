@@ -1,4 +1,5 @@
 import os
+
 import torch
 from accelerate import Accelerator
 
@@ -108,35 +109,50 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
     accelerator.print(f"Model saved to {prune_model_save_path}")
 
 
-def save_expert_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator):
+def save_expert_dropped_config(prune_model_save_path, model, tokenizer, accelerator: Accelerator):
     if accelerator.is_main_process:
         if not os.path.exists(prune_model_save_path):
             os.makedirs(prune_model_save_path)
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.config.save_pretrained(prune_model_save_path)
     accelerator.wait_for_everyone()
-    # tokenizer.save_pretrained(prune_model_save_path)
-    unwrapped_model = accelerator.unwrap_model(model)
-    unwrapped_model.config.save_pretrained(prune_model_save_path)
-    # unwrapped_model.generation_config.save_pretrained(prune_model_save_path)
-    # save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator, update_state_dict)
 
 
-def save_block_dropped_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
+def save_layer_dropped_config(prune_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
     # 🔍 save
-    accelerator.print("Saving models... (may take minutes)")
     if accelerator.is_main_process:
         if not os.path.exists(prune_model_save_path):
             os.makedirs(prune_model_save_path)
+
+        # 🔍 get reserved MLP layer ids
+        unwrapped_model = accelerator.unwrap_model(model)
+        reserved_layer_list = sorted(list(set(range(unwrapped_model.config.num_hidden_layers)) - set(dropped_layer_list)))
+        accelerator.print(f"Reserved layers: {reserved_layer_list}")
+
+        # 🔍 save the config
+        save_file = os.path.join(prune_model_save_path, "reserved_layers.json")
+        save_json(reserved_layer_list, save_file)
+
     accelerator.wait_for_everyone()
 
-    # 🔍 get new layer id mapping
-    unwrapped_model = accelerator.unwrap_model(model)
-    reserved_layer_list = sorted(list(set(range(unwrapped_model.config.num_hidden_layers)) - set(dropped_layer_list)))
-    accelerator.print(f"Reserved layers: {reserved_layer_list}")
 
-    layer_id_mapping = {}
-    for new_id, reserved_old_id in enumerate(reserved_layer_list):
-        layer_id_mapping[reserved_old_id] = new_id
+def save_block_dropped_config(prune_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
+    # 🔍 save
+    if accelerator.is_main_process:
+        if not os.path.exists(prune_model_save_path):
+            os.makedirs(prune_model_save_path)
 
-    # 🔍 save the config
-    save_mapping_file = os.path.join(prune_model_save_path, "layer_mapping.json")
-    save_json(layer_id_mapping, save_mapping_file)
+        # 🔍 get new layer id mapping
+        unwrapped_model = accelerator.unwrap_model(model)
+        reserved_layer_list = sorted(list(set(range(unwrapped_model.config.num_hidden_layers)) - set(dropped_layer_list)))
+        accelerator.print(f"Reserved layers: {reserved_layer_list}")
+
+        layer_id_mapping = {}
+        for new_id, reserved_old_id in enumerate(reserved_layer_list):
+            layer_id_mapping[reserved_old_id] = new_id
+
+        # 🔍 save the config
+        save_mapping_file = os.path.join(prune_model_save_path, "layer_mapping.json")
+        save_json(layer_id_mapping, save_mapping_file)
+
+    accelerator.wait_for_everyone()

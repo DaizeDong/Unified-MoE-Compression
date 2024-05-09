@@ -19,13 +19,14 @@
 # limitations under the License.
 """ PyTorch DeepSeek model."""
 import math
+import warnings
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import warnings
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import List, Optional, Tuple, Union
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -274,11 +275,11 @@ class DeepseekMLP(nn.Module):
 
 
 class MoEGate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx: int):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.n_routed_experts = config.n_routed_experts[layer_idx] if isinstance(config.n_routed_experts, list) else config.n_routed_experts  # 🔍
 
         self.scoring_func = config.scoring_func
         self.alpha = config.aux_loss_alpha
@@ -360,12 +361,16 @@ class DeepseekMoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, layer_idx: int):
         super().__init__()
         self.config = config
         self.num_experts_per_tok = config.num_experts_per_tok
-        self.experts = nn.ModuleList([DeepseekMLP(config, intermediate_size=config.moe_intermediate_size) for i in range(config.n_routed_experts)])
-        self.gate = MoEGate(config)
+
+        # 🔍
+        self.n_routed_experts = config.n_routed_experts[layer_idx] if isinstance(config.n_routed_experts, list) else config.n_routed_experts  # 🔍
+        self.experts = nn.ModuleList([DeepseekMLP(config, intermediate_size=config.moe_intermediate_size) for i in range(self.n_routed_experts)])  # 🔍
+        self.gate = MoEGate(config, layer_idx)
+
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekMLP(config=config, intermediate_size=intermediate_size)
@@ -900,10 +905,32 @@ class DeepseekDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Deepseek_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
-
-        self.mlp = DeepseekMoE(config) if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0) else DeepseekMLP(config)
         self.input_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # 🔍
+        # self.mlp = DeepseekMoE(config, layer_idx=layer_idx) if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0) else DeepseekMLP(config)
+        # self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # 🔍
+        if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0):
+            if hasattr(config, "layer_experts_idx"):
+                num_experts = len(config.layer_experts_idx[layer_idx])
+            else:
+                num_experts = config.n_routed_experts if isinstance(config.n_routed_experts, int) else config.n_routed_experts[layer_idx]
+
+            if num_experts <= 0:
+                self.mlp = None
+                self.post_attention_layernorm = None
+            else:
+                mode = getattr(config, "mode", "static")
+                if mode == "static":
+                    self.mlp = DeepseekMoE(config, layer_idx=layer_idx)
+                elif mode == "dynamic":
+                    raise NotImplementedError
+                self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        else:
+            self.mlp = DeepseekMLP(config)
+            self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
             self,
@@ -950,10 +977,12 @@ class DeepseekDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        if self.post_attention_layernorm is not None:
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
+        if self.mlp is not None:
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 

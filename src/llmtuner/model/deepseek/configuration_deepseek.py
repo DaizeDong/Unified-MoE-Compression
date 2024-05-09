@@ -1,9 +1,13 @@
+from typing import Union
+
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+
+
 class DeepseekConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekModel`]. It is used to instantiate an DeepSeek
@@ -105,38 +109,38 @@ class DeepseekConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
-        self,
-        vocab_size=102400,
-        hidden_size=4096,
-        intermediate_size=11008,
-        moe_intermediate_size = 1407,
-        num_hidden_layers=30,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        n_shared_experts = None,
-        n_routed_experts = None,
-        num_experts_per_tok = None,
-        moe_layer_freq = 1,
-        first_k_dense_replace = 0,
-        norm_topk_prob = False,
-        scoring_func = 'softmax',
-        aux_loss_alpha = 0.001,
-        seq_aux = True,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=100000,
-        eos_token_id=100001,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        **kwargs,
+            self,
+            vocab_size=102400,
+            hidden_size=4096,
+            intermediate_size=11008,
+            moe_intermediate_size=1407,
+            num_hidden_layers=30,
+            num_attention_heads=32,
+            num_key_value_heads=32,
+            n_shared_experts=None,
+            n_routed_experts: Union[int, list] = None,  # 🔍
+            num_experts_per_tok=None,
+            moe_layer_freq=1,
+            first_k_dense_replace=0,
+            norm_topk_prob=False,
+            scoring_func='softmax',
+            aux_loss_alpha=0.001,
+            seq_aux=True,
+            hidden_act="silu",
+            max_position_embeddings=2048,
+            initializer_range=0.02,
+            rms_norm_eps=1e-6,
+            use_cache=True,
+            pad_token_id=None,
+            bos_token_id=100000,
+            eos_token_id=100001,
+            pretraining_tp=1,
+            tie_word_embeddings=False,
+            rope_theta=10000.0,
+            rope_scaling=None,
+            attention_bias=False,
+            attention_dropout=0.0,
+            **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
