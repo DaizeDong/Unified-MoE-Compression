@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=sparsegpt
+#SBATCH --job-name=sp
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
@@ -71,16 +71,19 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-n_calibration_samples=1024
+n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
+#n_calibration_samples=1024
 seq_len=2048
-sparsity_ratio=0.5
 
 prune_method="sparsegpt"
-
 #sparsity_type="unstructured"
 #sparsity_type="4:8"
 sparsity_type="2:4"
 #sparsity_type="structured"
+sparsity_ratio=0.5
+exclude_prune_module_name=""
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 folder_name="DeepSeek-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
@@ -114,6 +117,7 @@ srun accelerate launch \
   --sparsity_ratio ${sparsity_ratio} \
   --prune_method ${prune_method} \
   --sparsity_type ${sparsity_type} \
+  --exclude_prune_module_name "${exclude_prune_module_name}" \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################

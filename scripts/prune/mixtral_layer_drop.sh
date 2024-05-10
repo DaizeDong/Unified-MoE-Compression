@@ -72,13 +72,15 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-#n_calibration_samples=128
-n_calibration_samples=1024
+n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
+#n_calibration_samples=1024
 seq_len=2048
 
 prune_method="layer_drop"
 layer_drop_method="discrete"
-drop_n=4
+drop_n=12
 similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
@@ -163,5 +165,3 @@ srun accelerate launch \
   --plot_loss \
   --bf16 \
   --print_param_status
-
-#rm -rf ${prune_model_save_path}

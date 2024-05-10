@@ -1,8 +1,21 @@
+import os
 import sys
+sys.path = [os.getcwd()] + sys.path
+
+# print(sys.path)
+# sys.path = [transformer_path] + sys.path
+
 from awq import AutoAWQForCausalLM
-from transformers import AutoTokenizer
+
+from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM
 import os
 import json
+from awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
+from awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+
+AutoConfig.register("deepseek", DeepseekConfig)
+AutoModel.register(DeepseekConfig, DeepseekModel)
+AutoModelForCausalLM.register(DeepseekConfig, DeepseekForCausalLM)
 
 model_path = sys.argv[1]
 quant_path = sys.argv[2]

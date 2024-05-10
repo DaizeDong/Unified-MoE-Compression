@@ -6,12 +6,11 @@
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=64
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
-# SBATCH --quotatype=spot
 #SBATCH --quotatype=auto
 # reserved spot auto
 
@@ -75,14 +74,17 @@ dataset="c4_train"
 prune_data_type="pt"
 
 n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
+#n_calibration_samples=1024
 seq_len=2048
-sparsity_ratio=0.5
 
 prune_method="wanda"
 #sparsity_type="unstructured"
-sparsity_type="4:8"
-# sparsity_type="2:4" 
+#sparsity_type="4:8"
+sparsity_type="2:4"
 #sparsity_type="structured"
+sparsity_ratio=0.5
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 #folder_name="debugggggg"

@@ -66,6 +66,8 @@ dataset="c4_train"
 prune_data_type="pt"
 
 #n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
 n_calibration_samples=1024
 seq_len=2048
 
@@ -161,5 +163,3 @@ srun accelerate launch \
   --plot_loss \
   --bf16 \
   --print_param_status
-
-#rm -rf ${prune_model_save_path}

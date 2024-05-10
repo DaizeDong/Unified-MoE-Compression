@@ -29,8 +29,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from llmtuner.model.pruning_modules import ExpertLinear, LoSparseLinear, GateLinear
 from .configuration_mixtral import MixtralConfig
+from ..pruning_modules import LoSparseLinear, ExpertLinear, GateLinear
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (

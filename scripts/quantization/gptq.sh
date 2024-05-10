@@ -1,21 +1,22 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=decompose
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --job-name=gptq
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization//%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=24
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
+# SBATCH --quotatype=spot
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=1 # should match with --gres
+num_gpu_per_node=4 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -62,26 +63,27 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-sparsity_ratio=$1
-model_name_or_path=$2
-output_dir=$3
-prune_model_save_path=$4
+source activate awq
 
-source ~/anaconda3/bin/activate compression
-cd /mnt/petrelfs/dongdaize.d/workspace/compression
+cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/zeroShot
 
-srun accelerate launch \
-  --config_file "config/accelerate/mixtral_normal.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage "prune" \
-  --model_name_or_path ${model_name_or_path} \
-  --output_dir ${output_dir} \
-  --logging_steps 10 \
-  --bf16 \
-  --sparsity_ratio ${sparsity_ratio} \
-  --prune_method "decompose_moe" \
-  --prune_model_save_path ${prune_model_save_path}
+model=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+model_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
+model=${model_path##*/}
+# model=/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1
+# model=/mnt/petrelfs/share_data/quxiaoye/models/Llama_2_13b_chat
+
+quantized_model_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization
+bits=4
+seed=0
+num_samples=128
+# calibration_template=llama-2
+calibration_template=mistral
+calibration_template=default
+
+abbreviation=${model##*/}-GPTQ-${bits}bits/checkpoint
+
+python gptq_auto.py --pretrained_model_dir $model --quantized_model_dir $quantized_model_dir/$abbreviation/checkpoint \
+                    --bits $bits --save_and_reload --desc_act \
+                    --seed $seed --num_samples $num_samples \
+                    --calibration-template $calibration_template

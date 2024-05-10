@@ -71,13 +71,21 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-n_calibration_samples=1024
+n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
+#n_calibration_samples=1024
 seq_len=2048
-r=48
 
 prune_method="expert_drop"
-expert_drop_method="layerwise_pruning"
-#expert_drop_method="global_pruning"
+#expert_drop_method="layerwise_pruning"
+expert_drop_method="global_pruning"
+#r=56
+#r=48
+#r=40
+#r=32
+#r=24
+r=16
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 folder_name="DeepSeek-${prune_method}-${expert_drop_method}-r${r}"

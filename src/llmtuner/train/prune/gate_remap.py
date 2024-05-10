@@ -85,7 +85,8 @@ def gate_remap(model, model_pruned, dataloader, accelerator: Accelerator, num_sa
 
                 total_token_num_each_device = original_dense_gate_outputs.shape[0]
 
-                if total_token_num_each_device * accelerator.num_processes <= 128 * 2048:  # can handle it with 80G GPU memory
+                if total_token_num_each_device * accelerator.num_processes <= 128 * 2048:
+                    """can handle it with 80G GPU memory"""
                     # use gathered hidden_states ro calculate the inverse
                     original_dense_gate_outputs = accelerator.gather(original_dense_gate_outputs)  # 🔍 all gather across devices
                     accelerator.print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
@@ -100,6 +101,7 @@ def gate_remap(model, model_pruned, dataloader, accelerator: Accelerator, num_sa
                     # remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
                     accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
                 else:
+                    """the tensors are too big, use distributed implementation"""
                     # calculate the inverse on each device, and then average the remapped_weights over devices
                     accelerator.print(f"original_gate_outputs: {original_dense_gate_outputs.shape}")
                     accelerator.print(f"Former Relative L2 Loss: {torch.pow(sparse_gate_outputs - original_dense_gate_outputs, exponent=2).mean()}")
@@ -107,11 +109,13 @@ def gate_remap(model, model_pruned, dataloader, accelerator: Accelerator, num_sa
                     sparse_gate_outputs.cpu()
                     torch.cuda.empty_cache()
 
+                    # 🙀 HERE IS WHERE THE ERROR OCCURS 🙀
+                    # It seems that when the tensors are too big, the "linalg.lstsq" will not work properly.
+                    # A possible solution is to split the tensors into smaller chunks and calculate the batched mean values.
                     remapped_weights = torch.linalg.lstsq(sparse_gate_inputs, original_dense_gate_outputs).solution
                     accelerator.print("remapped_weights", remapped_weights)
                     # remapped_weights = torch.pinverse(sparse_gate_inputs) @ original_dense_gate_outputs
                     remapped_weights = accelerator.reduce(remapped_weights, reduction="mean")  # 🔍 all reduce across devices
-                    # HERE IS WHERE THE ERROR OCCURS
                     accelerator.print(f"Latter Relative L2 Loss: {torch.pow(sparse_gate_inputs @ remapped_weights - original_dense_gate_outputs, exponent=2).mean()}")
 
                 # 🔍 update the state dict

@@ -272,7 +272,7 @@ def decompose_moe(args, model, accelerator: Accelerator):
             torch.cuda.empty_cache()
             print_gpu_memory(accelerator)
             layer = layers[i]
-            subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
+            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to prune
             accelerator.print(subset)
 
             layer.to(device)
@@ -334,7 +334,7 @@ def decompose_moe(args, model, accelerator: Accelerator):
             torch.cuda.empty_cache()
             print_gpu_memory(accelerator)
             layer = layers[i]
-            subset = find_moe_expert_linears(layer)  # 🔍 Find layers to prune
+            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to prune
             accelerator.print(subset)
 
             layer.to(device)
@@ -433,7 +433,7 @@ def decompose_moe(args, model, accelerator: Accelerator):
             layer.to("cpu")
 
     elif level == "model":
-        raise NotImplementedError
+        raise NotImplementedError("Not implemented yet.")
     else:
         raise NotImplementedError
 

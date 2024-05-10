@@ -27,7 +27,7 @@ AWQ_CAUSAL_LM_MODEL_MAP = {
     "qwen2": Qwen2AWQForCausalLM,
     "gemma": GemmaAWQForCausalLM,
     "stablelm": StableLmAWQForCausalLM,
-    # "starcoder2": Starcoder2AWQForCausalLM,
+    "deepseek": DeepseekAWQForCausalLM,
 }
 
 

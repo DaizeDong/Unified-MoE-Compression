@@ -66,8 +66,9 @@ dataset="c4_train"
 prune_data_type="pt"
 
 #n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
 n_calibration_samples=1024
-#n_calibration_samples=10000
 seq_len=2048
 
 prune_method="block_drop"

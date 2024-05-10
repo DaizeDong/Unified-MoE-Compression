@@ -86,8 +86,8 @@ def save_decomposed_model(prune_model_save_path, model, tokenizer, accelerator: 
         accelerator.print(f"State dict stored in CPU on process {accelerator.process_index}")
 
         # update state dict
-        accelerator.print("save_state_dict", list(save_state_dict.keys()))
-        accelerator.print("update_state_dict", list(update_state_dict.keys()))
+        # accelerator.print("save_state_dict", list(save_state_dict.keys()))
+        # accelerator.print("update_state_dict", list(update_state_dict.keys()))
 
         for name, param in update_state_dict.items():
             accelerator.print(f"Updating {name} (device = {update_state_dict[name].device})")

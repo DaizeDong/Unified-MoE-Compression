@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=sparsegpt
+#SBATCH --job-name=sp
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
@@ -72,13 +72,16 @@ dataset="c4_train"
 prune_data_type="pt"
 
 n_calibration_samples=128
+#n_calibration_samples=256
+#n_calibration_samples=512
+#n_calibration_samples=1024
 seq_len=2048
-sparsity_ratio=0.5
 
 prune_method="sparsegpt"
 #sparsity_type="unstructured"
 #sparsity_type="4:8"
 sparsity_type="2:4"
+sparsity_ratio=0.5
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"

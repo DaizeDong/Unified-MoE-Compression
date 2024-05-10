@@ -1,21 +1,21 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=layer
+#SBATCH --job-name=wanda-ns
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=1 # should match with --gres
+num_gpu_per_node=2 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -71,19 +71,22 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-#n_calibration_samples=128
+n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
-n_calibration_samples=1024
+#n_calibration_samples=1024
 seq_len=2048
 
-prune_method="layer_drop"
-layer_drop_method="discrete"
-drop_n=4
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
+prune_method="wanda"
+#sparsity_type="unstructured"
+#sparsity_type="4:8"
+sparsity_type="2:4"
+#sparsity_type="structured"
+sparsity_ratio=0.5
+exclude_prune_module_name="shared_experts"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-folder_name="DeepSeek-${prune_method}-${layer_drop_method}-drop${drop_n}"
+folder_name="DeepSeek-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn-NoShared"
 use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
 echo ${folder_name}
 
@@ -111,35 +114,10 @@ srun accelerate launch \
   --logging_steps 10 \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
+  --sparsity_ratio ${sparsity_ratio} \
   --prune_method ${prune_method} \
-  --layer_drop_method ${layer_drop_method} \
-  --drop_n ${drop_n} \
-  --similarity_cache_file ${similarity_cache_file} \
-  --prune_model_save_path ${prune_model_save_path}
-
-layer_drop_method="post_dropping"
-srun accelerate launch \
-  --config_file "config/accelerate/deepseek_normal.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage prune \
-  --model_name_or_path ${model_name_or_path} \
-  --use_fast_tokenizer ${use_fast_tokenizer} \
-  --dataset ${dataset} \
-  --split "train" \
-  --prune_data_type ${prune_data_type} \
-  --cutoff_len ${seq_len} \
-  --output_dir ${output_dir} \
-  --logging_steps 10 \
-  --bf16 \
-  --n_calibration_samples ${n_calibration_samples} \
-  --prune_method ${prune_method} \
-  --layer_drop_method ${layer_drop_method} \
-  --drop_n ${drop_n} \
-  --similarity_cache_file ${similarity_cache_file} \
+  --sparsity_type ${sparsity_type} \
+  --exclude_prune_module_name ${exclude_prune_module_name} \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
@@ -166,5 +144,8 @@ srun accelerate launch \
   --per_device_train_batch_size 4 \
   --logging_steps 10 \
   --plot_loss \
-  --bf16 \
-  --print_param_status
+  --bf16
+
+#  --print_param_status \
+
+# rm -rf ${prune_model_save_path}

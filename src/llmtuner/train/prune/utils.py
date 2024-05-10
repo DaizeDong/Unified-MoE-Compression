@@ -2,7 +2,7 @@ import torch
 from torch import nn as nn, cuda
 
 from llmtuner.model.deepseek.modeling_deepseek import MoEGate
-from llmtuner.model.pruning_modules import ExpertLinear
+from transformers.models.pruning_modules import ExpertLinear
 
 
 def print_gpu_memory(accelerator):
@@ -40,26 +40,40 @@ def find_modules(module, layers=[], name='') -> dict:
     return res
 
 
-def find_moe_expert_linears(module) -> dict:
+def find_moe_expert_linears(module, exclude_names: str = None) -> dict:
     # 🔍 find only the expert weights
     res = find_modules(module, [ExpertLinear])
+    if exclude_names is not None:
+        exclude_names = exclude_names.split(',')
+        for module_name in list(res.keys()):
+            for exclude_name in exclude_names:
+                if exclude_name in module_name:
+                    res.pop(module_name)
+                    break
     return res
 
 
-def find_moe_gates(module) -> dict:
+def find_moe_gates(module, exclude_names: str = None) -> dict:
     # 🔍 find only the gate network
     res = find_modules(module, [nn.Linear, MoEGate])  # MoEGate for DeepSeek
     for key in list(res.keys()):
         if ".gate." not in key:
             res.pop(key)
+    if exclude_names is not None:
+        exclude_names = exclude_names.split(',')
+        for module_name in list(res.keys()):
+            for exclude_name in exclude_names:
+                if exclude_name in module_name:
+                    res.pop(module_name)
+                    break
     return res
 
 
-def find_moe_expert_linears_and_gate(module) -> dict:
-    # 🔍 find the expert weights and gate weights
-    res_experts = find_moe_expert_linears(module)
-    res_gates = find_moe_gates(module)
-    return {**res_experts, **res_gates}  # merge the two dict
+# def find_moe_expert_linears_and_gate(module, exclude_names: str = None) -> dict:
+#     # 🔍 find the expert weights and gate weights
+#     res_experts = find_moe_expert_linears(module, exclude_names=exclude_names)
+#     res_gates = find_moe_gates(module, exclude_names=exclude_names)
+#     return {**res_experts, **res_gates}  # merge the two dict
 
 
 @torch.no_grad()

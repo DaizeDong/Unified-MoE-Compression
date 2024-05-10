@@ -34,13 +34,17 @@ class PruningArguments:
     )
 
     # 🔍 For pruning
-    sparsity_ratio: Optional[float] = field(  # this term denotes the "parameter_ratio" for decomposition
+    sparsity_ratio: Optional[float] = field(  # this term also denotes the "parameter_ratio" for decomposition
         default=0.5,
         metadata={"help": "Sparsity Level."},
     )
     sparsity_type: Optional[Literal["structured", "unstructured", "4:8", "2:4"]] = field(
         default="unstructured",
         metadata={"choices": ["structured", "unstructured", "4:8", "2:4"]},
+    )
+    exclude_prune_module_name: Optional[str] = field(
+        default=None,
+        metadata={"help": "Module names to exclude when pruning. (Use \",\" to separate different modules if excluding more than one module)"},
     )
     use_variant: Optional[bool] = field(
         default=False,
