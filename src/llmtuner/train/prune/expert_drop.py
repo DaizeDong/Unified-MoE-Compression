@@ -191,8 +191,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         accelerator.print("Updating model config...")
         setattr(unwrapped_model.config, "num_local_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
-        setattr(unwrapped_model.config, "layer_deltas", layer_deltas)
-        setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
+        # setattr(unwrapped_model.config, "layer_deltas", layer_deltas)
+        # setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
@@ -340,8 +340,8 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         accelerator.print("Updating model config...")
         setattr(unwrapped_model.config, "num_local_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
-        setattr(unwrapped_model.config, "layer_deltas", layer_deltas)
-        setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
+        # setattr(unwrapped_model.config, "layer_deltas", layer_deltas)
+        # setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)

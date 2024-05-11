@@ -1,15 +1,14 @@
-import os
+import json
 import sys
+import os
 sys.path = [os.getcwd()] + sys.path
+print(f"sys.path: {sys.path}")
 
-# print(sys.path)
-# sys.path = [transformer_path] + sys.path
+import transformers
+print(f"transformers: {transformers}")
 
 from awq import AutoAWQForCausalLM
-
 from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM
-import os
-import json
 from awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
 from awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 
@@ -24,13 +23,26 @@ bits = sys.argv[3]
 # model_path = "/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1/"
 # model_path = 'mistralai/Mistral-7B-Instruct-v0.2'
 # quant_path = '/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ/mistral-instruct-v0.2-awq'
+if "deepseek" in model_path:
+    q_group_size = 64
+else:
+    q_group_size = 128
 
-quant_config = { "zero_point": True, "q_group_size": 128, "w_bit": int(bits), "version": "GEMM" }
+modules_to_not_convert = ["self_attn"]
+quant_config = {
+                "zero_point": True, 
+                "q_group_size": q_group_size, 
+                "w_bit": int(bits), 
+                "version": "GEMM", 
+                "modules_to_not_convert": modules_to_not_convert,
+                }
 
+print(f"quant_config: {quant_config}")
 # Load model
 model = AutoAWQForCausalLM.from_pretrained(
     model_path, **{"low_cpu_mem_usage": True, "use_cache": False}
 )
+
 tokenizer = AutoTokenizer.from_pretrained(
     model_path, 
     use_fast=False, 

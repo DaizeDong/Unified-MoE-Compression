@@ -11,8 +11,8 @@
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH --quotatype=spot
-# SBATCH --quotatype=auto
+# SBATCH --quotatype=spot
+#SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes

@@ -112,8 +112,8 @@ def check_sparsity_from_state_dict(state_dict):
     # Get corresponding names for each layer
     layer_params = {}
     for name in sorted(list(state_dict.keys())):
-        # Example: model.layers.5.block_sparse_moe.experts.2.w3.weight
-        # Example: model.layers.13.mlp.experts.28.up_proj
+        # Example (Mixtral): model.layers.5.block_sparse_moe.experts.2.w3.weight
+        # Example (DeepSeek): model.layers.13.mlp.experts.28.up_proj
         # print(f"name: {name}")
 
         if "layers" in name:
@@ -129,16 +129,18 @@ def check_sparsity_from_state_dict(state_dict):
     count = 0
     total_params = 0
     for i in range(layer_num):
-        sub_count = 0
-        sub_params = 0
-        for name in layer_params[i]:
-            count += (state_dict[name] == 0).sum().item()
-            total_params += state_dict[name].numel()
+        if i in layer_params:
+            sub_count = 0
+            sub_params = 0
+            for name in layer_params[i]:
+                count += (state_dict[name] == 0).sum().item()
+                total_params += state_dict[name].numel()
 
-            sub_count += (state_dict[name] == 0).sum().item()
-            sub_params += state_dict[name].numel()
-
-        print(f"layer {i} sparsity {float(sub_count) / sub_params:.6f}")
+                sub_count += (state_dict[name] == 0).sum().item()
+                sub_params += state_dict[name].numel()
+            print(f"layer {i} sparsity {float(sub_count) / sub_params:.6f}")
+        else:
+            print(f"layer {i} sparsity {0.0:.6f}")
 
     return float(count) / total_params
 

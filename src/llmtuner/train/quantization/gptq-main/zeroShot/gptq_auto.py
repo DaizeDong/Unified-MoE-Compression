@@ -1,21 +1,28 @@
 import json
-import random
 import sys
 import os
+import time
+import torch
+import random
+import transformers
 
 sys.path = [os.path.abspath(os.path.dirname(os.path.dirname(__file__)))] + sys.path
+print(f"sys.path: {sys.path }")
+print(f"transformers: {transformers}")
 
-import time
 from argparse import ArgumentParser
-
-import torch
-import auto_gptq
-print(auto_gptq)
+from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM, TextGenerationPipeline, GenerationConfig
 from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-print(AutoGPTQForCausalLM)
+from auto_gptq.modeling.deepseek_moe.configuration_deepseek import DeepseekConfig
+from auto_gptq.modeling.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+
+
 from datasets import Dataset
-from transformers import AutoTokenizer, TextGenerationPipeline, GenerationConfig
 from fastchat.conversation import get_conv_template
+
+AutoConfig.register("deepseek", DeepseekConfig)
+AutoModel.register(DeepseekConfig, DeepseekModel)
+AutoModelForCausalLM.register(DeepseekConfig, DeepseekForCausalLM)
 
 
 llama_2_template = """<s>[INST] <<SYS>>
@@ -151,7 +158,7 @@ def main():
         max_memory["cpu"] = f"{args.cpu_max_memory}GIB"
     if not max_memory:
         max_memory = None
-
+    
     tokenizer = AutoTokenizer.from_pretrained(
         args.pretrained_model_dir,
         use_fast=args.fast_tokenizer,

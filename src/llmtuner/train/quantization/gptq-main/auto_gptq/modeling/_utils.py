@@ -40,7 +40,7 @@ def find_layers(module, layers=None, name="", moe_only=True):
     for layer in layers:
         if isinstance(module, layer):
             if moe_only:
-                if "moe" in name:
+                if any(label in name for label in ["mlp", "moe"]):
                     return {name: module}
             else:
                 return {name: module}

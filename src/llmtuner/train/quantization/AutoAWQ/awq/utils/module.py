@@ -47,11 +47,14 @@ def append_str_prefix(x, prefix):
 
 
 def exclude_layers_to_not_quantize(linear_layers, modules_to_not_convert):
+    # print(f"modules_to_not_convert: {modules_to_not_convert}")
     if modules_to_not_convert is None:
         return linear_layers
 
     filtered_layers = {}
     for name, linear_layer in linear_layers.items():
         if not any(key in name for key in modules_to_not_convert):
+            filtered_layers[name] = linear_layer
+        elif "gate_proj" in name: # 🔍 add gate_proj to filtered_layers. 
             filtered_layers[name] = linear_layer
     return filtered_layers

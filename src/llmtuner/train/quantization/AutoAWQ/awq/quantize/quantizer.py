@@ -22,7 +22,9 @@ from awq.utils.module import (
     set_op_by_name,
     exclude_layers_to_not_quantize,
 )
+import logging
 
+logger = logging.getLogger(__name__)
 
 class AwqQuantizer:
     def __init__(
@@ -115,6 +117,8 @@ class AwqQuantizer:
 
     def quantize(self):
         for i in tqdm(range(len(self.modules)), desc="AWQ"):
+        # for i in range(len(self.modules)):
+            # print('----')
             # Move module and inputs to correct device
             common_device = next(self.modules[i].parameters()).device
             if common_device is None or str(common_device) == "cpu":
@@ -145,7 +149,8 @@ class AwqQuantizer:
             named_linears = exclude_layers_to_not_quantize(
                 named_linears, self.modules_to_not_convert
             )
-
+            
+            print(f"named_linears: {named_linears}")
             input_feat = self._get_input_feat(self.modules[i], named_linears)
             clear_memory()
 
@@ -153,6 +158,9 @@ class AwqQuantizer:
             module_config: List[Dict] = self.awq_model.get_layers_for_scaling(
                 self.modules[i], input_feat, self.module_kwargs
             )
+            logger.info(f"module_config: {module_config}")
+            for layer in module_config:
+                logger.info(f"layer: {layer.keys()}")
             scales_list = [
                 self._search_best_scale(self.modules[i], **layer)
                 for layer in module_config
@@ -246,7 +254,7 @@ class AwqQuantizer:
 
         # Put x on the right device
         inp = inp.to(next(module2inspect.parameters()).device)
-
+        # print(f"layers: {layers}")
         # [STEP 1]: Compute per-channel mean of normalised weights
         # All layer weights are concatted together
         weight = torch.cat([_m.weight for _m in layers], dim=0)
@@ -520,7 +528,11 @@ class AwqQuantizer:
                 **named_linears,
                 "block_sparse_moe": layer.block_sparse_moe,
             }
-
+        elif self.awq_model.model_type == "deepseek":     
+            named_linears = {
+                **named_linears,
+                "mlp": layer.mlp,
+            }
         for name in named_linears:
             handles.append(
                 named_linears[name].register_forward_hook(

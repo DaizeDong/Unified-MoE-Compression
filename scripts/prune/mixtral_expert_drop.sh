@@ -1,21 +1,21 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=sp
+#SBATCH --job-name=expert
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=26
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:2
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=4 # should match with --gres
+num_gpu_per_node=2 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -69,6 +69,8 @@ echo "Total GPUs: $num_processes"
 #prune_data_type="pt"
 
 dataset="c4_train"
+# dataset="MetaMathQA"
+# dataset="codealpaca"
 prune_data_type="pt"
 
 n_calibration_samples=128
@@ -77,14 +79,15 @@ n_calibration_samples=128
 #n_calibration_samples=1024
 seq_len=2048
 
-prune_method="sparsegpt"
-#sparsity_type="unstructured"
-#sparsity_type="4:8"
-sparsity_type="2:4"
-sparsity_ratio=0.5
+prune_method="expert_drop"
+#expert_drop_method="layerwise_pruning"
+expert_drop_method="global_pruning"
+r=4
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
+folder_name="Mixtral-${prune_method}-${expert_drop_method}-r${r}"
+echo ${folder_name}
+
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
 
@@ -108,34 +111,59 @@ srun accelerate launch \
   --logging_steps 10 \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
-  --sparsity_ratio ${sparsity_ratio} \
   --prune_method ${prune_method} \
-  --sparsity_type ${sparsity_type} \
+  --expert_drop_method ${expert_drop_method} \
+  --r ${r} \
   --prune_model_save_path ${prune_model_save_path}
 
-##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
-
+expert_drop_method="post_dropping"
 srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
   --main_process_port ${port} \
   src/train_bash.py \
-  --stage pt \
-  --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
+  --stage prune \
+  --model_name_or_path ${model_name_or_path} \
   --dataset ${dataset} \
-  --finetuning_type full \
+  --split "train" \
+  --prune_data_type ${prune_data_type} \
+  --cutoff_len ${seq_len} \
   --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
   --logging_steps 10 \
-  --plot_loss \
-  --bf16
+  --bf16 \
+  --n_calibration_samples ${n_calibration_samples} \
+  --prune_method ${prune_method} \
+  --expert_drop_method ${expert_drop_method} \
+  --r ${r} \
+  --prune_model_save_path ${prune_model_save_path}
 
-#  --print_param_status \
+##############################################################################
+# output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+
+# #dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+# #dataset=alpaca-gpt4_de,c4_valid
+# dataset=alpaca-gpt4_de
+
+# srun accelerate launch \
+#   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+#   --num_processes ${num_processes} \
+#   --num_machines ${num_nodes} \
+#   --main_process_ip ${head_node_ip} \
+#   --main_process_port ${port} \
+#   src/train_bash.py \
+#   --stage pt \
+#   --do_eval \
+#   --model_name_or_path ${prune_model_save_path} \
+#   --dataset ${dataset} \
+#   --finetuning_type full \
+#   --output_dir ${output_dir} \
+#   --per_device_train_batch_size 4 \
+#   --logging_steps 10 \
+#   --plot_loss \
+#   --bf16 \
+#   --expert_drop_method ${expert_drop_method} \
+#   --print_param_status
+
+# rm -rf ${prune_model_save_path}

@@ -63,13 +63,14 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-source activate awq
+source activate quant
 
 cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/zeroShot
 
-model=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+model_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 model_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 model=${model_path##*/}
+
 # model=/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1
 # model=/mnt/petrelfs/share_data/quxiaoye/models/Llama_2_13b_chat
 
@@ -83,7 +84,8 @@ calibration_template=default
 
 abbreviation=${model##*/}-GPTQ-${bits}bits/checkpoint
 
-python gptq_auto.py --pretrained_model_dir $model --quantized_model_dir $quantized_model_dir/$abbreviation/checkpoint \
+python gptq_auto.py --pretrained_model_dir $model_path --quantized_model_dir $quantized_model_dir/$abbreviation \
                     --bits $bits --save_and_reload --desc_act \
                     --seed $seed --num_samples $num_samples \
-                    --calibration-template $calibration_template
+                    --calibration-template $calibration_template \
+                    --trust_remote_code \

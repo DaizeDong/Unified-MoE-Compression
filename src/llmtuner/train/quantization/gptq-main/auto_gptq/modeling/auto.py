@@ -25,7 +25,7 @@ from .rw import RWGPTQForCausalLM
 from .stablelmepoch import StableLMEpochGPTQForCausalLM
 from .xverse import XverseGPTQForCausalLM
 from .yi import YiGPTQForCausalLM
-
+from .deepseek import DeepseekGPTQForCausalLM
 
 GPTQ_CAUSAL_LM_MODEL_MAP = {
     "bloom": BloomGPTQForCausalLM,
@@ -52,6 +52,7 @@ GPTQ_CAUSAL_LM_MODEL_MAP = {
     "qwen2": Qwen2GPTQForCausalLM,
     "longllama": LongLlamaGPTQForCausalLM,
     "gemma": GemmaGPTQForCausalLM,
+    "deepseek": DeepseekGPTQForCausalLM, 
 }
 
 
