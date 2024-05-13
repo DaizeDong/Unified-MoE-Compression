@@ -20,7 +20,7 @@ from .deepseek_moe.modeling_deepseek import (
 class DeepseekAWQForCausalLM(BaseAWQForCausalLM):
     layer_type = "DeepseekDecoderLayer"
     max_seq_len_key = "max_position_embeddings"
-    modules_to_not_convert = ["gate", "self_attn"] # 🔍 may exclude the first layer too. 
+    modules_to_not_convert = ["gate", "self_attn"]  # 🔍 may exclude the first layer too.
 
     @staticmethod
     def fuse_layers(model: OldDeepseekForCausalLM):
@@ -75,19 +75,19 @@ class DeepseekAWQForCausalLM(BaseAWQForCausalLM):
                         inp=input_feat["self_attn.o_proj"],
                     )
                 )
-                
+
         if isinstance(module.mlp, DeepseekMoE):  # MoE
             # linear in
             shared_experts_in = [module.mlp.shared_experts.gate_proj, module.mlp.shared_experts.up_proj] \
-                        if module.mlp.config.n_shared_experts is not None else []
+                if module.mlp.config.n_shared_experts is not None else []
             layers.append(
                 dict(
                     prev_op=module.post_attention_layernorm,
                     layers=[
-                        w
-                        for expert in module.mlp.experts
-                        for w in [expert.gate_proj, expert.up_proj]
-                    ] + shared_experts_in,
+                               w
+                               for expert in module.mlp.experts
+                               for w in [expert.gate_proj, expert.up_proj]
+                           ] + shared_experts_in,
                     inp=input_feat["mlp"],
                     module2inspect=module.mlp,
                 )

@@ -292,7 +292,6 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
         use_cuda_fp16: bool = True,
         autotune_warmup_after_quantized: bool = False,
         cache_examples_on_gpu: bool = True,
-        moe_only: bool = True # 🔍 ignore parameters outside moe. 
     ):
         if self.quantized:
             raise EnvironmentError("can't execute quantize because the model is quantized.")
@@ -417,10 +416,6 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
             cur_layer_device = get_device(layer)
 
             full = find_layers(layer)
-            # if moe_only: 
-            #     non_moe_names = [name for name in full if "moe"  not in name]
-            #     for key in non_moe_names:
-            #         full.pop(key)
                             
             for names in inside_layer_modules:
                 subset = {n: full[n] for n in names if n in full}

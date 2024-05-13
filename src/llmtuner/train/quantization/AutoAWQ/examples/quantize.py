@@ -34,7 +34,7 @@ quant_config = {
                 "q_group_size": q_group_size, 
                 "w_bit": int(bits), 
                 "version": "GEMM", 
-                "modules_to_not_convert": modules_to_not_convert,
+                # "modules_to_not_convert": modules_to_not_convert,
                 }
 
 print(f"quant_config: {quant_config}")

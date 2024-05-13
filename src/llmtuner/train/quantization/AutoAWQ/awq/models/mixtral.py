@@ -43,19 +43,20 @@ class MixtralAWQForCausalLM(BaseAWQForCausalLM):
         layers = []
 
         # attention input
-        layers.append(
-            dict(
-                prev_op=module.input_layernorm,
-                layers=[
-                    module.self_attn.q_proj,
-                    module.self_attn.k_proj,
-                    module.self_attn.v_proj,
-                ],
-                inp=input_feat["self_attn.q_proj"],
-                module2inspect=module.self_attn,
-                kwargs=module_kwargs,
+        if "self_attn.q_proj" in input_feat:
+            layers.append(
+                dict(
+                    prev_op=module.input_layernorm,
+                    layers=[
+                        module.self_attn.q_proj,
+                        module.self_attn.k_proj,
+                        module.self_attn.v_proj,
+                    ],
+                    inp=input_feat["self_attn.q_proj"],
+                    module2inspect=module.self_attn,
+                    kwargs=module_kwargs,
+                )
             )
-        )
 
         # attention out
         if module.self_attn.v_proj.weight.shape == module.self_attn.o_proj.weight.shape:

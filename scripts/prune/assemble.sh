@@ -137,7 +137,6 @@ srun accelerate launch \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-
 #############################################  Expert Drop  #############################################
 
 n_calibration_samples=128

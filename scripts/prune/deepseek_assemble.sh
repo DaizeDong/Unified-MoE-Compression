@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=layer
+#SBATCH --job-name=ass
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 #SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
 
@@ -10,12 +10,12 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=1 # should match with --gres
+num_gpu_per_node=2 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -62,12 +62,6 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-#dataset="lima"
-#prune_data_type="sft"
-
-#dataset="wikitext"
-#prune_data_type="pt"
-
 dataset="c4_train"
 prune_data_type="pt"
 
@@ -77,13 +71,16 @@ n_calibration_samples=128
 #n_calibration_samples=1024
 seq_len=2048
 
-prune_method="layer_drop"
-layer_drop_method="discrete"
-drop_n=12
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
+############################### BLOCK DROP ###############################
+##############################################################################
+prune_method="block_drop"
+#block_drop_method="consecutive"
+block_drop_method="discrete"
+drop_n=2
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-folder_name="DeepSeek-${prune_method}-${layer_drop_method}-drop${drop_n}"
+folder_name="DeepSeek-${prune_method}-${block_drop_method}-drop${drop_n}"
 use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
 echo ${folder_name}
 
@@ -112,12 +109,12 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --layer_drop_method ${layer_drop_method} \
+  --block_drop_method ${block_drop_method} \
   --drop_n ${drop_n} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-layer_drop_method="post_dropping"
+block_drop_method="post_dropping"
 srun accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \
   --num_processes ${num_processes} \
@@ -137,17 +134,28 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --layer_drop_method ${layer_drop_method} \
+  --block_drop_method ${block_drop_method} \
   --drop_n ${drop_n} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
+############################### EXPERT DROP ###############################
 ##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+prune_method="expert_drop"
+#expert_drop_method="layerwise_pruning"
+expert_drop_method="global_pruning"
+r=16
 
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
+model_name_or_path="${output_dir}/checkpoint"
+folder_name="${folder_name}-${prune_method}-${expert_drop_method}-r${r}"
+use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
+echo ${folder_name}
+
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
+prune_model_save_path=${output_dir}/checkpoint
+
+source ~/anaconda3/bin/activate compression
+cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
 srun accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \
@@ -156,15 +164,42 @@ srun accelerate launch \
   --main_process_ip ${head_node_ip} \
   --main_process_port ${port} \
   src/train_bash.py \
-  --stage pt \
-  --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
+  --stage prune \
+  --model_name_or_path ${model_name_or_path} \
   --use_fast_tokenizer ${use_fast_tokenizer} \
   --dataset ${dataset} \
-  --finetuning_type full \
+  --split "train" \
+  --prune_data_type ${prune_data_type} \
+  --cutoff_len ${seq_len} \
   --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
   --logging_steps 10 \
-  --plot_loss \
   --bf16 \
-  --print_param_status
+  --n_calibration_samples ${n_calibration_samples} \
+  --prune_method ${prune_method} \
+  --expert_drop_method ${expert_drop_method} \
+  --r ${r} \
+  --prune_model_save_path ${prune_model_save_path}
+
+expert_drop_method="post_dropping"
+srun accelerate launch \
+  --config_file "config/accelerate/deepseek_normal.yaml" \
+  --num_processes ${num_processes} \
+  --num_machines ${num_nodes} \
+  --main_process_ip ${head_node_ip} \
+  --main_process_port ${port} \
+  src/train_bash.py \
+  --stage prune \
+  --model_name_or_path ${model_name_or_path} \
+  --use_fast_tokenizer ${use_fast_tokenizer} \
+  --dataset ${dataset} \
+  --split "train" \
+  --prune_data_type ${prune_data_type} \
+  --cutoff_len ${seq_len} \
+  --output_dir ${output_dir} \
+  --logging_steps 10 \
+  --bf16 \
+  --n_calibration_samples ${n_calibration_samples} \
+  --prune_method ${prune_method} \
+  --expert_drop_method ${expert_drop_method} \
+  --r ${r} \
+  --prune_model_save_path ${prune_model_save_path}

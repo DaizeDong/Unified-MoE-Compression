@@ -78,14 +78,14 @@ n_calibration_samples=128
 seq_len=2048
 
 prune_method="expert_drop"
-#expert_drop_method="layerwise_pruning"
-expert_drop_method="global_pruning"
-#r=56
+expert_drop_method="layerwise_pruning"
+#expert_drop_method="global_pruning"
+r=56
 #r=48
 #r=40
 #r=32
 #r=24
-r=16
+#r=16
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 folder_name="DeepSeek-${prune_method}-${expert_drop_method}-r${r}"

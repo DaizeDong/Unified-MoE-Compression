@@ -11,12 +11,12 @@
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH --quotatype=auto
+#SBATCH --quotatype=spot
 # reserved spot auto
 
 #####################################################################################################################
 source ~/anaconda3/bin/activate awq
-cd /mnt/petrelfs/dongdaize.d/workspace/compression
+# cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
 # OMP_NUM_THREADS=8 srun --partition=MoE --job-name=temp --mpi=pmi2 --gres=gpu:1 -n1 --ntasks-per-node=1 -c 16 --kill-on-bad-exit=1 \
-python src/llmtuner/train/prune/speedup_demo.py
+python /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/demo.py

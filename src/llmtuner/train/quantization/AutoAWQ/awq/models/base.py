@@ -458,8 +458,8 @@ class BaseAWQForCausalLM(nn.Module):
         )
 
         # Dispath to devices
-        # if fuse_layers:
-        #     self.fuse_layers(model)
+        if fuse_layers:
+            self.fuse_layers(model)
 
         if quant_config.version == "marlin":
             model = marlin_post_init(model)

@@ -47,7 +47,6 @@ def append_str_prefix(x, prefix):
 
 
 def exclude_layers_to_not_quantize(linear_layers, modules_to_not_convert):
-    # print(f"modules_to_not_convert: {modules_to_not_convert}")
     if modules_to_not_convert is None:
         return linear_layers
 

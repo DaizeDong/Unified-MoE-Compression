@@ -66,6 +66,7 @@ def run_prune(
     if pruning_args.prune_method == "expert_drop" and pruning_args.expert_drop_method == "post_dropping":
         assert (os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")) and (os.environ.get("ACCELERATE_USE_FSDP", "false"))
         config = load_json(os.path.join(pruning_args.prune_model_save_path, "config.json"))
+        accelerator.wait_for_everyone()
         post_experts_drop(pruning_args.prune_model_save_path, model, tokenizer, config["layer_experts_idx"], accelerator)
         if accelerator.is_main_process:
             save_json(config, os.path.join(pruning_args.prune_model_save_path, "config.json"), indent=2)

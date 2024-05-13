@@ -80,9 +80,9 @@ n_calibration_samples=128
 seq_len=2048
 
 prune_method="expert_drop"
-#expert_drop_method="layerwise_pruning"
-expert_drop_method="global_pruning"
-r=4
+expert_drop_method="layerwise_pruning"
+#expert_drop_method="global_pruning"
+r=5
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${expert_drop_method}-r${r}"

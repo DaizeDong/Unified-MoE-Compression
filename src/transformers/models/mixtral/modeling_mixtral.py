@@ -28,6 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.sparse import to_sparse_semi_structured
 
 from .configuration_mixtral import MixtralConfig
 from ..pruning_modules import LoSparseLinear, ExpertLinear, GateLinear
@@ -71,6 +72,44 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MixtralConfig"
+
+
+def is_semi_structured_weight(weight: torch.Tensor) -> bool:
+    """🔍 Check if the weight is semi-structured (1:2 or 2:4)."""
+    # Ensure the tensor is 2D.
+    if weight.dim() != 2:
+        return False
+
+    # Check sparsity
+    mask = (weight == 0)
+    if mask.sum().item() != weight.numel() // 2:
+        return False
+
+    # Check 1:2
+    is_1_2 = True
+    sparse_param_count_1_2 = torch.full((weight.shape[1],), 1, dtype=torch.int64, device=weight.device)
+    for row_group in mask.split(2, dim=0):
+        # mask: shape(output_dim, input_dim)
+        # row_group: shape(2, input_dim)
+        if not torch.equal(row_group.sum(dim=0), sparse_param_count_1_2):
+            is_1_2 = False
+            break
+    if is_1_2:
+        return True
+
+    # Check 2:4
+    is_2_4 = True
+    sparse_param_count_2_4 = torch.full((weight.shape[1],), 2, dtype=torch.int64, device=weight.device)
+    for row_group in mask.split(4, dim=0):
+        # mask: shape(output_dim, input_dim)
+        # row_group: shape(4, input_dim)
+        if not torch.equal(row_group.sum(dim=0), sparse_param_count_2_4):
+            is_2_4 = False
+            break
+    if is_2_4:
+        return True
+
+    return False
 
 
 def load_balancing_loss_func(
@@ -1390,6 +1429,14 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
     def get_decoder(self):
         return self.model
+
+    def convert_semi_structured_weights(self):
+        # 🔍 Automatically check & convert semi-structured sparse weights in the model
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Linear, ExpertLinear, GateLinear)):
+                if is_semi_structured_weight(module.weight.data):
+                    module.weight = nn.Parameter(to_sparse_semi_structured(module.weight))
+                    print(f"Converted {name} weights to semi-structured weights")
 
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

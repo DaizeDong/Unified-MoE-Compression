@@ -34,7 +34,7 @@ def move_to_device(obj: Optional[Union[torch.Tensor, nn.Module]], device: torch.
         return obj
 
 
-def find_layers(module, layers=None, name="", moe_only=True):
+def find_layers(module, layers=None, name="", moe_only=False):
     if not layers:
         layers = [transformers.pytorch_utils.Conv1D, nn.Conv2d, nn.Linear]
     for layer in layers:

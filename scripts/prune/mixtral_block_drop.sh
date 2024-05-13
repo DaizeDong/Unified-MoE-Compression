@@ -72,9 +72,9 @@ n_calibration_samples=1024
 seq_len=2048
 
 prune_method="block_drop"
-block_drop_method="consecutive"
-#block_drop_method="discrete"
-drop_n=4
+#block_drop_method="consecutive"
+block_drop_method="discrete"
+drop_n=6
 similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-block-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
