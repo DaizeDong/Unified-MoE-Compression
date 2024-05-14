@@ -71,6 +71,78 @@ n_calibration_samples=128
 #n_calibration_samples=1024
 seq_len=2048
 
+############################### EXPERT DROP ###############################
+##############################################################################
+echo "EXPERT DROP"
+prune_method="expert_drop"
+#expert_drop_method="layerwise_pruning"
+expert_drop_method="global_pruning"
+r=56
+#r=48
+
+model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
+folder_name="DeepSeek-${prune_method}-${expert_drop_method}-r${r}"
+use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
+echo ${folder_name}
+
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
+prune_model_save_path=${output_dir}/checkpoint
+
+source ~/anaconda3/bin/activate compression
+cd /mnt/petrelfs/dongdaize.d/workspace/compression
+
+CHECK_FILE_NAME="${output_dir}/checkpoint/model.safetensors.index.json"
+if [ -f $CHECK_FILE_NAME ]; then # 文件存在
+  echo "Checkpoint $CHECK_FILE_NAME already exists!"
+else
+  srun accelerate launch \
+    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --num_processes ${num_processes} \
+    --num_machines ${num_nodes} \
+    --main_process_ip ${head_node_ip} \
+    --main_process_port ${port} \
+    src/train_bash.py \
+    --stage prune \
+    --model_name_or_path ${model_name_or_path} \
+    --use_fast_tokenizer ${use_fast_tokenizer} \
+    --dataset ${dataset} \
+    --split "train" \
+    --prune_data_type ${prune_data_type} \
+    --cutoff_len ${seq_len} \
+    --output_dir ${output_dir} \
+    --logging_steps 10 \
+    --bf16 \
+    --n_calibration_samples ${n_calibration_samples} \
+    --prune_method ${prune_method} \
+    --expert_drop_method ${expert_drop_method} \
+    --r ${r} \
+    --prune_model_save_path ${prune_model_save_path}
+
+  expert_drop_method="post_dropping"
+  srun accelerate launch \
+    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --num_processes ${num_processes} \
+    --num_machines ${num_nodes} \
+    --main_process_ip ${head_node_ip} \
+    --main_process_port ${port} \
+    src/train_bash.py \
+    --stage prune \
+    --model_name_or_path ${model_name_or_path} \
+    --use_fast_tokenizer ${use_fast_tokenizer} \
+    --dataset ${dataset} \
+    --split "train" \
+    --prune_data_type ${prune_data_type} \
+    --cutoff_len ${seq_len} \
+    --output_dir ${output_dir} \
+    --logging_steps 10 \
+    --bf16 \
+    --n_calibration_samples ${n_calibration_samples} \
+    --prune_method ${prune_method} \
+    --expert_drop_method ${expert_drop_method} \
+    --r ${r} \
+    --prune_model_save_path ${prune_model_save_path}
+fi
+
 ############################### BLOCK DROP ###############################
 ##############################################################################
 echo "BLOCK DROP"
@@ -79,10 +151,10 @@ prune_method="block_drop"
 block_drop_method="discrete"
 #drop_n=2
 drop_n=4
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/${folder_name}/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
 
-model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-folder_name="DeepSeek-${prune_method}-${block_drop_method}-drop${drop_n}"
+model_name_or_path="${output_dir}/checkpoint"
+folder_name="${folder_name}-${prune_method}-${block_drop_method}-drop${drop_n}"
 use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
 echo ${folder_name}
 
@@ -143,78 +215,6 @@ else
     --block_drop_method ${block_drop_method} \
     --drop_n ${drop_n} \
     --similarity_cache_file ${similarity_cache_file} \
-    --prune_model_save_path ${prune_model_save_path}
-fi
-
-############################### EXPERT DROP ###############################
-##############################################################################
-echo "EXPERT DROP"
-prune_method="expert_drop"
-#expert_drop_method="layerwise_pruning"
-expert_drop_method="global_pruning"
-r=56
-#r=48
-
-model_name_or_path="${output_dir}/checkpoint"
-folder_name="${folder_name}-${prune_method}-${expert_drop_method}-r${r}"
-use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
-echo ${folder_name}
-
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
-prune_model_save_path=${output_dir}/checkpoint
-
-source ~/anaconda3/bin/activate compression
-cd /mnt/petrelfs/dongdaize.d/workspace/compression
-
-CHECK_FILE_NAME="${output_dir}/checkpoint/model.safetensors.index.json"
-if [ -f $CHECK_FILE_NAME ]; then # 文件存在
-  echo "Checkpoint $CHECK_FILE_NAME already exists!"
-else
-  srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
-    --num_processes ${num_processes} \
-    --num_machines ${num_nodes} \
-    --main_process_ip ${head_node_ip} \
-    --main_process_port ${port} \
-    src/train_bash.py \
-    --stage prune \
-    --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
-    --dataset ${dataset} \
-    --split "train" \
-    --prune_data_type ${prune_data_type} \
-    --cutoff_len ${seq_len} \
-    --output_dir ${output_dir} \
-    --logging_steps 10 \
-    --bf16 \
-    --n_calibration_samples ${n_calibration_samples} \
-    --prune_method ${prune_method} \
-    --expert_drop_method ${expert_drop_method} \
-    --r ${r} \
-    --prune_model_save_path ${prune_model_save_path}
-
-  expert_drop_method="post_dropping"
-  srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
-    --num_processes ${num_processes} \
-    --num_machines ${num_nodes} \
-    --main_process_ip ${head_node_ip} \
-    --main_process_port ${port} \
-    src/train_bash.py \
-    --stage prune \
-    --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
-    --dataset ${dataset} \
-    --split "train" \
-    --prune_data_type ${prune_data_type} \
-    --cutoff_len ${seq_len} \
-    --output_dir ${output_dir} \
-    --logging_steps 10 \
-    --bf16 \
-    --n_calibration_samples ${n_calibration_samples} \
-    --prune_method ${prune_method} \
-    --expert_drop_method ${expert_drop_method} \
-    --r ${r} \
     --prune_model_save_path ${prune_model_save_path}
 fi
 

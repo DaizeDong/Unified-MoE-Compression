@@ -6,12 +6,13 @@
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=26
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
 #SBATCH --quotatype=auto
+# SBATCH --quotatype=reserved
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
@@ -71,19 +72,16 @@ n_calibration_samples=128
 #n_calibration_samples=1024
 seq_len=2048
 
-############################### BLOCK DROP ###############################
+############################### LAYER DROP ###############################
 ##############################################################################
-echo "BLOCK DROP"
-prune_method="block_drop"
-#block_drop_method="consecutive"
-block_drop_method="discrete"
-#drop_n=2
-drop_n=4
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
+echo "LAYER DROP"
+prune_method="layer_drop"
+layer_drop_method="discrete"
+drop_n=8
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
 
-model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-folder_name="DeepSeek-${prune_method}-${block_drop_method}-drop${drop_n}"
-use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
+model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+folder_name="Mixtral-${prune_method}-${layer_drop_method}-drop${drop_n}"
 echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
@@ -97,7 +95,7 @@ if [ -f $CHECK_FILE_NAME ]; then # 文件存在
   echo "Checkpoint $CHECK_FILE_NAME already exists!"
 else
   srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --config_file "config/accelerate/mixtral_deepspeed.yaml" \
     --num_processes ${num_processes} \
     --num_machines ${num_nodes} \
     --main_process_ip ${head_node_ip} \
@@ -105,7 +103,6 @@ else
     src/train_bash.py \
     --stage prune \
     --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
     --dataset ${dataset} \
     --split "train" \
     --prune_data_type ${prune_data_type} \
@@ -115,14 +112,14 @@ else
     --bf16 \
     --n_calibration_samples ${n_calibration_samples} \
     --prune_method ${prune_method} \
-    --block_drop_method ${block_drop_method} \
+    --layer_drop_method ${layer_drop_method} \
     --drop_n ${drop_n} \
     --similarity_cache_file ${similarity_cache_file} \
     --prune_model_save_path ${prune_model_save_path}
 
-  block_drop_method="post_dropping"
+  layer_drop_method="post_dropping"
   srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --config_file "config/accelerate/mixtral_normal.yaml" \
     --num_processes ${num_processes} \
     --num_machines ${num_nodes} \
     --main_process_ip ${head_node_ip} \
@@ -130,7 +127,6 @@ else
     src/train_bash.py \
     --stage prune \
     --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
     --dataset ${dataset} \
     --split "train" \
     --prune_data_type ${prune_data_type} \
@@ -140,7 +136,7 @@ else
     --bf16 \
     --n_calibration_samples ${n_calibration_samples} \
     --prune_method ${prune_method} \
-    --block_drop_method ${block_drop_method} \
+    --layer_drop_method ${layer_drop_method} \
     --drop_n ${drop_n} \
     --similarity_cache_file ${similarity_cache_file} \
     --prune_model_save_path ${prune_model_save_path}
@@ -152,12 +148,10 @@ echo "EXPERT DROP"
 prune_method="expert_drop"
 #expert_drop_method="layerwise_pruning"
 expert_drop_method="global_pruning"
-r=56
-#r=48
+r=1
 
 model_name_or_path="${output_dir}/checkpoint"
 folder_name="${folder_name}-${prune_method}-${expert_drop_method}-r${r}"
-use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
 echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
@@ -171,7 +165,7 @@ if [ -f $CHECK_FILE_NAME ]; then # 文件存在
   echo "Checkpoint $CHECK_FILE_NAME already exists!"
 else
   srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --config_file "config/accelerate/mixtral_deepspeed.yaml" \
     --num_processes ${num_processes} \
     --num_machines ${num_nodes} \
     --main_process_ip ${head_node_ip} \
@@ -179,7 +173,6 @@ else
     src/train_bash.py \
     --stage prune \
     --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
     --dataset ${dataset} \
     --split "train" \
     --prune_data_type ${prune_data_type} \
@@ -195,7 +188,7 @@ else
 
   expert_drop_method="post_dropping"
   srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --config_file "config/accelerate/mixtral_normal.yaml" \
     --num_processes ${num_processes} \
     --num_machines ${num_nodes} \
     --main_process_ip ${head_node_ip} \
@@ -203,7 +196,6 @@ else
     src/train_bash.py \
     --stage prune \
     --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
     --dataset ${dataset} \
     --split "train" \
     --prune_data_type ${prune_data_type} \

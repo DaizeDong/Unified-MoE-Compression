@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=ass
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --job-name=ttt
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_assemble/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_assemble/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --mem=0
 
 #SBATCH --nodes=1

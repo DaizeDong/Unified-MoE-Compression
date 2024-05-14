@@ -63,8 +63,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     accelerator.print('Starting ...')
     update_num_experts_list = []
     update_experts_idx = []
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        layer_deltas = []
+    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
+    #     layer_deltas = []
 
     for i in tqdm(range(num_layers), desc="Dropping layers...", disable=not accelerator.is_main_process):
         sys.stderr.flush()
@@ -73,97 +73,104 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         layer = layers[i]
 
         if i in moe_layer_indices:
-            # Find modules
-            if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                subset = find_modules(layer, [MixtralSparseMoeBlock])
-            elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                subset = find_modules(layer, [MoEGate])
-            # captured_weights_subset = find_moe_expert_linears_and_gate(layer)  # 👆 Find weights to capture (here the gate & w1 & w2 & w3)
-            # accelerator.print(subset)
-            # accelerator.print(captured_weights_subset)
+            this_layer_num_experts = num_experts[i] if isinstance(num_experts, list) else num_experts
 
-            # Wrap layers
-            wrapped_layers = {}
-            for name in subset:
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                    wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
-                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-                    wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
+            if this_layer_num_experts > args.r:
+                # Find modules
+                if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
+                    subset = find_modules(layer, [MixtralSparseMoeBlock])
+                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
+                    subset = find_modules(layer, [MoEGate])
+                # captured_weights_subset = find_moe_expert_linears_and_gate(layer)  # 👆 Find weights to capture (here the gate & w1 & w2 & w3)
+                # accelerator.print(subset)
+                # accelerator.print(captured_weights_subset)
 
-            # 👆 Wrap weights to record during forward
-            # (WHY: DeepSpeed will temporarily collect intact weights to GPU during forward, so we can capture them using forward hooks)
-            # captured_weights_wrapped_layers = {}
-            # for name in captured_weights_subset:
-            #     captured_weights_wrapped_layers[name] = WeightRecordWrapper(captured_weights_subset[name], layer_name=name)
+                # Wrap layers
+                wrapped_layers = {}
+                for name in subset:
+                    if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                        wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
+                    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                        wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
 
-            # Forward hook for recording metrics
-            def add_batch(name):
-                def mixtral_hook(_, input, output):
-                    wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
+                # 👆 Wrap weights to record during forward
+                # (WHY: DeepSpeed will temporarily collect intact weights to GPU during forward, so we can capture them using forward hooks)
+                # captured_weights_wrapped_layers = {}
+                # for name in captured_weights_subset:
+                #     captured_weights_wrapped_layers[name] = WeightRecordWrapper(captured_weights_subset[name], layer_name=name)
 
-                def deepseek_hook(_, input, output):
-                    wrapped_layers[name].add_batch(input[0].data, output[0].data, output[1].data)  # output[0] is topk ids, output[1] is topk scores (after softmax)
+                # Forward hook for recording metrics
+                def add_batch(name):
+                    def mixtral_hook(_, input, output):
+                        wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
 
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                    return mixtral_hook  # 🔍
-                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-                    return deepseek_hook  # 🔍
+                    def deepseek_hook(_, input, output):
+                        wrapped_layers[name].add_batch(input[0].data, output[0].data, output[1].data)  # output[0] is topk ids, output[1] is topk scores (after softmax)
 
-            # def record_weight(name):  # 👆
-            #     def hook(_, input, output):
-            #         captured_weights_wrapped_layers[name].record(input, output)
-            #
-            #     return hook
+                    if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                        return mixtral_hook  # 🔍
+                    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                        return deepseek_hook  # 🔍
 
-            # Get importance
-            handles = []
-            for name in wrapped_layers:
-                handles.append(subset[name].register_forward_hook(add_batch(name)))
-            # for name in captured_weights_wrapped_layers:  # 👆
-            #     handles.append(captured_weights_subset[name].register_forward_hook(record_weight(name)))
-            for j in range(num_samples):
-                outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
-            for h in handles:
-                h.remove()
+                # def record_weight(name):  # 👆
+                #     def hook(_, input, output):
+                #         captured_weights_wrapped_layers[name].record(input, output)
+                #
+                #     return hook
 
-            # 🔍 Expert Drop
-            for name in subset:
-                module_state_dict_name = f"model.layers.{i}.{name}"
-                accelerator.print(f"Dropping for {module_state_dict_name}")
+                # Get importance
+                handles = []
+                for name in wrapped_layers:
+                    handles.append(subset[name].register_forward_hook(add_batch(name)))
+                # for name in captured_weights_wrapped_layers:  # 👆
+                #     handles.append(captured_weights_subset[name].register_forward_hook(record_weight(name)))
+                for j in range(num_samples):
+                    outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+                for h in handles:
+                    h.remove()
 
-                # 🔍 sort total scores
-                # [IMPORTANT] all reduce across devices
-                scores = wrapped_layers[name].scores
-                scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
-                accelerator.print(f"layer {i} scores: {scores}")
+                # 🔍 Expert Drop
+                for name in subset:  # should be only one element in subset
+                    module_state_dict_name = f"model.layers.{i}.{name}"
+                    accelerator.print(f"Dropping for {module_state_dict_name}")
 
-                _, experts_to_drop = torch.topk(scores, num_experts - args.r, largest=False)
-                experts_to_drop = experts_to_drop.tolist()
-                accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
-                experts_to_preserve = sorted(list(set(range(num_experts)) - set(experts_to_drop)))
-                update_num_experts_list.append(len(experts_to_preserve))
-                update_experts_idx.append(experts_to_preserve)
+                    # 🔍 sort total scores
+                    # [IMPORTANT] all reduce across devices
+                    scores = wrapped_layers[name].scores
+                    scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+                    accelerator.print(f"layer {i} scores: {scores}")
 
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                    # delta = measure_delta_top2(scores)
-                    ana_list = wrapped_layers[name].ana_list
-                    delta = np.mean(ana_list)
-                    accelerator.print(f"layer {i} delta: {delta}")
-                    layer_deltas.append(delta)
+                    _, experts_to_drop = torch.topk(scores, this_layer_num_experts - args.r, largest=False)
+                    experts_to_drop = experts_to_drop.tolist()
+                    accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
+                    experts_to_preserve = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_drop)))
+                    update_num_experts_list.append(len(experts_to_preserve))
+                    update_experts_idx.append(experts_to_preserve)
 
-            # 🔍 update the state dict
-            # 👆 get weights from the "captured_weights_wrapped_layers"
-            # update_state_dict[f"{module_state_dict_name}.gate.weight"] = captured_weights_wrapped_layers[f"{name}.gate"].weight[list(experts_to_preserve)]
-            # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w1"].weight
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w2"].weight
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w3"].weight
+                    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                    #     # delta = measure_delta_top2(scores)
+                    #     ana_list = wrapped_layers[name].ana_list
+                    #     delta = np.mean(ana_list)
+                    #     accelerator.print(f"layer {i} delta: {delta}")
+                    #     layer_deltas.append(delta)
 
-            # update_state_dict[f"{module_state_dict_name}.gate.weight"] = wrapped_layers[name].gate[list(experts_to_preserve)].clone().bfloat16().cpu()
-            # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = wrapped_layers[name].w1.clone().bfloat16().cpu()
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = wrapped_layers[name].w2.clone().bfloat16().cpu()
-            #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = wrapped_layers[name].w3.clone().bfloat16().cpu()
+                # 🔍 update the state dict
+                # 👆 get weights from the "captured_weights_wrapped_layers"
+                # update_state_dict[f"{module_state_dict_name}.gate.weight"] = captured_weights_wrapped_layers[f"{name}.gate"].weight[list(experts_to_preserve)]
+                # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
+                #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w1"].weight
+                #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w2"].weight
+                #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = captured_weights_wrapped_layers[f"{name}.experts.{old_expert_id}.w3"].weight
+
+                # update_state_dict[f"{module_state_dict_name}.gate.weight"] = wrapped_layers[name].gate[list(experts_to_preserve)].clone().bfloat16().cpu()
+                # for new_expert_id, old_expert_id in enumerate(experts_to_preserve):
+                #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w1.weight"] = wrapped_layers[name].w1.clone().bfloat16().cpu()
+                #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w2.weight"] = wrapped_layers[name].w2.clone().bfloat16().cpu()
+                #     update_state_dict[f"{module_state_dict_name}.experts.{new_expert_id}.w3.weight"] = wrapped_layers[name].w3.clone().bfloat16().cpu()
+
+            else:  # do not drop as the remaining experts have already satisfied the requirement
+                update_num_experts_list.append(this_layer_num_experts)
+                update_experts_idx.append(list(range(this_layer_num_experts)))
 
         else:
             for j in range(num_samples):
@@ -178,9 +185,9 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     accelerator.print("update_num_experts_list", update_num_experts_list)
     accelerator.print("update_experts_idx", update_experts_idx)
 
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        layer_deltas = fill_missing_values_for_non_moe_layers(layer_deltas, moe_layer_indices, num_layers)
-        accelerator.print("layer_deltas", layer_deltas)
+    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
+    #     layer_deltas = fill_missing_values_for_non_moe_layers(layer_deltas, moe_layer_indices, num_layers)
+    #     accelerator.print("layer_deltas", layer_deltas)
 
     # 🔍 Update the config
     accelerator.print("Expert dropping done!")
@@ -220,13 +227,19 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
+    # 🔍 Get valid MoE layer ids
+    if isinstance(num_experts, list):
+        valid_moe_layer_indices = [i for i in moe_layer_indices if num_experts[i] > 0]
+    else:
+        valid_moe_layer_indices = moe_layer_indices
+
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)
 
     accelerator.print('Starting ...')
     global_scores = []
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        layer_deltas = []
+    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
+    #     layer_deltas = []
 
     for i in tqdm(range(num_layers), desc="Gathering scores...", disable=not accelerator.is_main_process):
         sys.stderr.flush()
@@ -234,7 +247,7 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         print_gpu_memory(accelerator)
         layer = layers[i]
 
-        if i in moe_layer_indices:
+        if i in valid_moe_layer_indices:
             # Find modules
             if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
                 subset = find_modules(layer, [MixtralSparseMoeBlock])
@@ -283,12 +296,12 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                 global_scores.append(scores)
                 accelerator.print(f"layer {i} scores: {scores}")
 
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                    # delta = measure_delta_top2(scores)
-                    ana_list = wrapped_layers[name].ana_list
-                    delta = np.mean(ana_list)
-                    accelerator.print(f"layer {i} delta: {delta}")
-                    layer_deltas.append(delta)
+                # if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                #     # delta = measure_delta_top2(scores)
+                #     ana_list = wrapped_layers[name].ana_list
+                #     delta = np.mean(ana_list)
+                #     accelerator.print(f"layer {i} delta: {delta}")
+                #     layer_deltas.append(delta)
 
         else:
             for j in range(num_samples):
@@ -300,26 +313,58 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
     print_gpu_memory(accelerator)
     torch.cuda.empty_cache()
 
-    # 🔍 Cat scores
-    global_scores = torch.cat(global_scores, dim=0)  # 🔍 gather the scores.
-    accelerator.print(f"global_scores: {global_scores}")
+    # 🔍 Get number of experts to drop
+    if isinstance(num_experts, list):
+        total_num_experts = sum([n for n in num_experts if n is not None])
+    else:
+        total_num_experts = num_experts * len(moe_layer_indices)
 
-    _, experts_to_drop = torch.topk(global_scores, (num_experts - args.r) * len(moe_layer_indices), largest=False)
-    experts_to_drop = sorted(experts_to_drop.tolist())
-    accelerator.print(f"experts_to_drop: {experts_to_drop}")
+    avg_experts_per_moe_layer = total_num_experts / len(valid_moe_layer_indices)
+    num_experts_to_drop = round((avg_experts_per_moe_layer - args.r) * len(valid_moe_layer_indices))
 
-    # 🔍 Expert Drop
-    update_num_experts_list = []
-    update_experts_idx = []
+    if num_experts_to_drop > 0:
+        # 🔍 Cat scores
+        global_scores = torch.cat(global_scores, dim=0)  # 🔍 gather the scores.
+        accelerator.print(f"global_scores: {global_scores}")
 
-    for position_id, layer_id in tqdm(enumerate(moe_layer_indices), desc='Dropping Experts...'):
-        # position_id: position of the element in the list
-        experts_to_preserve = sorted(list(set(range(num_experts * position_id, num_experts * (position_id + 1))) - set(experts_to_drop)))
-        experts_to_preserve = [i - position_id * num_experts for i in experts_to_preserve]
-        accelerator.print(f"layer {layer_id} experts_to_preserve: {experts_to_preserve}")
+        _, experts_to_drop = torch.topk(global_scores, num_experts_to_drop, largest=False)
+        experts_to_drop = sorted(experts_to_drop.tolist())
+        accelerator.print(f"experts_to_drop: {experts_to_drop}")
 
-        update_num_experts_list.append(len(experts_to_preserve))
-        update_experts_idx.append(experts_to_preserve)
+        # 🔍 Expert Drop
+        update_num_experts_list = []
+        update_experts_idx = []
+
+        if isinstance(num_experts, list):
+            for layer_id in tqdm(moe_layer_indices, desc='Dropping Experts...'):
+                if layer_id in valid_moe_layer_indices:
+                    position_begin_id = sum([n for n in num_experts[:layer_id] if n is not None])
+                    position_end_id = sum([n for n in num_experts[:(layer_id + 1)] if n is not None])
+                    experts_to_preserve = sorted(list(set(range(position_begin_id, position_end_id)) - set(experts_to_drop)))
+                    experts_to_preserve = [i - position_begin_id for i in experts_to_preserve]
+                    accelerator.print(f"layer {layer_id} experts_to_preserve: {experts_to_preserve}")
+
+                    update_num_experts_list.append(len(experts_to_preserve))
+                    update_experts_idx.append(experts_to_preserve)
+                else:
+                    update_num_experts_list.append(0)
+                    update_experts_idx.append(None)
+
+        else:
+            for position_id, layer_id in tqdm(enumerate(moe_layer_indices), desc='Dropping Experts...'):
+                # position_id: position of the element in the list
+                position_begin_id = num_experts * position_id
+                position_end_id = num_experts * (position_id + 1)
+                experts_to_preserve = sorted(list(set(range(position_begin_id, position_end_id)) - set(experts_to_drop)))
+                experts_to_preserve = [i - position_begin_id for i in experts_to_preserve]
+                accelerator.print(f"layer {layer_id} experts_to_preserve: {experts_to_preserve}")
+
+                update_num_experts_list.append(len(experts_to_preserve))
+                update_experts_idx.append(experts_to_preserve)
+
+    else:  # do not drop as the remaining number of experts has already satisfied the requirement
+        update_num_experts_list = num_experts
+        update_experts_idx = [list(range(num_experts[i] if isinstance(num_experts, list) else num_experts)) for i in range(len(moe_layer_indices))]
 
     # 🔍 Fill in the missing values for non-MoE layers
     update_num_experts_list = fill_missing_values_for_non_moe_layers(update_num_experts_list, moe_layer_indices, num_layers)
@@ -327,9 +372,9 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
     accelerator.print("update_num_experts_list", update_num_experts_list)
     accelerator.print("update_experts_idx", update_experts_idx)
 
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        layer_deltas = fill_missing_values_for_non_moe_layers(layer_deltas, moe_layer_indices, num_layers)
-        accelerator.print("layer_deltas", layer_deltas)
+    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
+    #     layer_deltas = fill_missing_values_for_non_moe_layers(layer_deltas, moe_layer_indices, num_layers)
+    #     accelerator.print("layer_deltas", layer_deltas)
 
     # 🔍 Update the config
     accelerator.print("Expert dropping done!")

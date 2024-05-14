@@ -86,6 +86,10 @@ class PruningArguments:
         metadata={"help": ' '.join(['Supported dropping methods:'] + list(LAYER_DROP_METHODS)),
                   "choices": LAYER_DROP_METHODS},
     )
+    layer_drop_norm: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Whether to drop the LayerNorm before MoE."},
+    )
     block_drop_method: Optional[str] = field(
         default="discrete",
         metadata={"help": ' '.join(['Supported dropping methods:'] + list(BLOCK_DROP_METHODS)),

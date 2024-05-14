@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @no_grad()
-def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int, cache_file=None):
+def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int, drop_norm: bool, cache_file=None):
     device = accelerator.device
 
     if cache_file is not None and os.path.exists(cache_file):
@@ -69,7 +69,10 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                     mlp_pre_norm = layer.post_attention_layernorm
                     mlp = layer.mlp
 
-                wrapped_mlp_pre_norm = HiddenStatesRecordWrapper(mlp_pre_norm, record_input=True, record_output=False)  # 🔍 Wrap layer
+                if drop_norm:
+                    wrapped_mlp_pre_norm = HiddenStatesRecordWrapper(mlp_pre_norm, record_input=True, record_output=False)  # 🔍 Wrap layer
+                else:
+                    wrapped_mlp_pre_norm = HiddenStatesRecordWrapper(mlp_pre_norm, record_input=False, record_output=True)  # 🔍 Wrap layer
                 wrapped_mlp = HiddenStatesRecordWrapper(mlp, record_input=False, record_output=True)  # 🔍 Wrap layer
 
                 # Forward hook for recording hidden states
@@ -88,14 +91,18 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                 for handle in handles:
                     handle.remove()
 
-                input_hidden_states = torch.cat(wrapped_mlp_pre_norm.input_hidden_states, dim=0).float().to(device)
-                output_hidden_states = torch.cat(wrapped_mlp.output_hidden_states, dim=0).float().to(device)
+                if drop_norm:
+                    input_hidden_states = torch.cat(wrapped_mlp_pre_norm.input_hidden_states, dim=0).float().to(device)
+                    output_hidden_states = input_hidden_states + torch.cat(wrapped_mlp.output_hidden_states, dim=0).float().to(device)
+                else:
+                    input_hidden_states = torch.cat(wrapped_mlp_pre_norm.output_hidden_states, dim=0).float().to(device)
+                    output_hidden_states = torch.cat(wrapped_mlp.output_hidden_states, dim=0).float().to(device)
                 # accelerator.print('layer', i)
                 # accelerator.print('input_hidden_states', input_hidden_states)
                 # accelerator.print('output_hidden_states', output_hidden_states)
 
                 # 🔍 Calculate similarity (output+input due to residual connection)
-                cos_sim = F.cosine_similarity(input_hidden_states, output_hidden_states + input_hidden_states, dim=-1)  # (total_token_num)
+                cos_sim = F.cosine_similarity(input_hidden_states, output_hidden_states, dim=-1)  # (total_token_num)
                 cos_sim = cos_sim.mean()
                 cos_sim = accelerator.reduce(cos_sim, reduction="mean")  # 🔍 All reduce across devices
                 accelerator.print(f'layer {i} similarity: {cos_sim.item()}')
@@ -129,7 +136,7 @@ def discrete_layer_dropping(args: Namespace, model: MixtralForCausalLM, dataload
     """
     drop_n = args.drop_n
 
-    similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
+    similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, args.layer_drop_norm, cache_file=args.similarity_cache_file)
     sorted_similarities, sorted_layer_id = torch.sort(similarities, dim=0, descending=True)
 
     dropped_layer_list = sorted_layer_id[:drop_n].tolist()
@@ -147,9 +154,9 @@ def post_layers_drop(prune_model_save_path, model, tokenizer, reserved_layer_lis
         for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping MLPs...'):
             if layer_id in reserved_layer_list:
                 if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                    num_experts.append(unwrapped_model.config.num_local_experts)
+                    num_experts.append(unwrapped_model.config.num_local_experts[layer_id] if isinstance(unwrapped_model.config.num_local_experts, list) else unwrapped_model.config.num_local_experts)
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                    num_experts.append(unwrapped_model.config.n_routed_experts)
+                    num_experts.append(unwrapped_model.config.n_routed_experts[layer_id] if isinstance(unwrapped_model.config.n_routed_experts, list) else unwrapped_model.config.n_routed_experts)
             else:
                 if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
                     layer.post_attention_layernorm = None

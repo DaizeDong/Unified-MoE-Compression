@@ -86,14 +86,14 @@ def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
 
         all_hidden_states = []
         for i in tqdm(range(len(layers)), desc="Concatenating hidden states...", disable=not accelerator.is_main_process):
-            all_hidden_states.append(torch.cat(wrapped_layers[i].input_hidden_states, dim=0).to(device))  # (total_token_num, hidden_size)
-        all_hidden_states.append(torch.cat(wrapped_layers[-1].output_hidden_states, dim=0).to(device))
+            all_hidden_states.append(torch.cat(wrapped_layers[i].input_hidden_states, dim=0).float())  # (total_token_num, hidden_size)
+        all_hidden_states.append(torch.cat(wrapped_layers[-1].output_hidden_states, dim=0).float())
         accelerator.print(f'Total {len(all_hidden_states)} hidden states concatenated.')
 
         for i in tqdm(range(len(all_hidden_states)), desc="Calculating similarities...", disable=not accelerator.is_main_process):
             for j in range(i + 1, len(all_hidden_states)):
-                packed_hidden_states_layer_i = all_hidden_states[i]
-                packed_hidden_states_layer_j = all_hidden_states[j]
+                packed_hidden_states_layer_i = all_hidden_states[i].to(device)
+                packed_hidden_states_layer_j = all_hidden_states[j].to(device)
                 index_gap = j - i
 
                 cos_sim = F.cosine_similarity(packed_hidden_states_layer_i, packed_hidden_states_layer_j, dim=-1)  # (total_token_num)
@@ -177,13 +177,34 @@ def post_block_drop(prune_model_save_path, model, tokenizer, layer_id_mapping, a
 
         # 🔍 initialize a new model and save
         accelerator.print("Initializing the new model...")
+
+        # Config
         new_config = deepcopy(model.config)
         new_config.num_hidden_layers = len(layer_id_mapping)
-        accelerator.print(new_config)
+
+        preserved_layers = sorted([int(s) for s in layer_id_mapping.keys()])
+        accelerator.print("preserved_layers", preserved_layers)
+
+        if isinstance(model, MixtralPreTrainedModel):
+            if hasattr(new_config, "layer_experts_idx"):
+                new_config.layer_experts_idx = [model.config.layer_experts_idx[i] for i in preserved_layers]
+            if isinstance(new_config.num_local_experts, list):
+                new_config.num_local_experts = [model.config.num_local_experts[i] for i in preserved_layers]
+
+        elif isinstance(model, DeepseekPreTrainedModel):
+            if hasattr(new_config, "layer_experts_idx"):
+                new_config.layer_experts_idx = [model.config.layer_experts_idx[i] for i in preserved_layers]
+            if isinstance(new_config.n_routed_experts, list):
+                new_config.n_routed_experts = [model.config.n_routed_experts[i] for i in preserved_layers]
+        accelerator.print("new_config", new_config)
+
+        # Model
         new_model = type(model)(new_config)
         new_model.load_state_dict(save_state_dict, strict=True)
         new_model.bfloat16()
         accelerator.print("new_model", new_model)
+
+        # Save
         accelerator.print("Saving...")
         new_model.save_pretrained(prune_model_save_path)
         tokenizer.save_pretrained(prune_model_save_path)

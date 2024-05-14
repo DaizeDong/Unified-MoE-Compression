@@ -10,12 +10,12 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:8
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=1 # should match with --gres
+num_gpu_per_node=8 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -65,16 +65,16 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-n_calibration_samples=128
+#n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
-#n_calibration_samples=1024
+n_calibration_samples=1024
 seq_len=2048
 
 prune_method="block_drop"
 #block_drop_method="consecutive"
 block_drop_method="discrete"
-drop_n=8
+drop_n=6
 similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek

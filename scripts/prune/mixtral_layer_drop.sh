@@ -80,11 +80,17 @@ seq_len=2048
 
 prune_method="layer_drop"
 layer_drop_method="discrete"
-drop_n=12
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
+drop_n=1
+#layer_drop_norm=True
+#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
+layer_drop_norm=False
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${layer_drop_method}-drop${drop_n}"
+if [ ${layer_drop_norm} = "False" ]; then
+  folder_name="${folder_name}-NoNorm"
+fi
 echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
@@ -113,6 +119,7 @@ srun accelerate launch \
   --prune_method ${prune_method} \
   --layer_drop_method ${layer_drop_method} \
   --drop_n ${drop_n} \
+  --layer_drop_norm ${layer_drop_norm} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
@@ -137,6 +144,7 @@ srun accelerate launch \
   --prune_method ${prune_method} \
   --layer_drop_method ${layer_drop_method} \
   --drop_n ${drop_n} \
+  --layer_drop_norm ${layer_drop_norm} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 

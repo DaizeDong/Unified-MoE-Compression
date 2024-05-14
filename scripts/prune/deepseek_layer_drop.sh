@@ -79,11 +79,17 @@ seq_len=2048
 
 prune_method="layer_drop"
 layer_drop_method="discrete"
-drop_n=12
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
+drop_n=1
+#layer_drop_norm=True
+#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
+layer_drop_norm=False
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 folder_name="DeepSeek-${prune_method}-${layer_drop_method}-drop${drop_n}"
+if [ ${layer_drop_norm} = "False" ]; then
+  folder_name="${folder_name}-NoNorm"
+fi
 use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
 echo ${folder_name}
 
@@ -114,6 +120,7 @@ srun accelerate launch \
   --prune_method ${prune_method} \
   --layer_drop_method ${layer_drop_method} \
   --drop_n ${drop_n} \
+  --layer_drop_norm ${layer_drop_norm} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
@@ -139,6 +146,7 @@ srun accelerate launch \
   --prune_method ${prune_method} \
   --layer_drop_method ${layer_drop_method} \
   --drop_n ${drop_n} \
+  --layer_drop_norm ${layer_drop_norm} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
