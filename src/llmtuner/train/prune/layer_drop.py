@@ -91,12 +91,14 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                 for handle in handles:
                     handle.remove()
 
+                dtype = torch.float32 if num_samples <= 64 else torch.bfloat16
+
                 if drop_norm:
-                    input_hidden_states = torch.cat(wrapped_mlp_pre_norm.input_hidden_states, dim=0).float().to(device)
-                    output_hidden_states = input_hidden_states + torch.cat(wrapped_mlp.output_hidden_states, dim=0).float().to(device)
+                    input_hidden_states = torch.cat(wrapped_mlp_pre_norm.input_hidden_states, dim=0).to(dtype).to(device)
+                    output_hidden_states = input_hidden_states + torch.cat(wrapped_mlp.output_hidden_states, dim=0).to(dtype).to(device)
                 else:
-                    input_hidden_states = torch.cat(wrapped_mlp_pre_norm.output_hidden_states, dim=0).float().to(device)
-                    output_hidden_states = torch.cat(wrapped_mlp.output_hidden_states, dim=0).float().to(device)
+                    input_hidden_states = torch.cat(wrapped_mlp_pre_norm.output_hidden_states, dim=0).to(dtype).to(device)
+                    output_hidden_states = torch.cat(wrapped_mlp.output_hidden_states, dim=0).to(dtype).to(device)
                 # accelerator.print('layer', i)
                 # accelerator.print('input_hidden_states', input_hidden_states)
                 # accelerator.print('output_hidden_states', output_hidden_states)
@@ -164,7 +166,7 @@ def post_layers_drop(prune_model_save_path, model, tokenizer, reserved_layer_lis
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                     layer.post_attention_layernorm = None
                     layer.mlp = None
-                num_experts.append(0)
+                num_experts.append(-1)  # 🔍 append -1 to mark that the layer has no MoE and Norm
 
         if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
             unwrapped_model.config.num_local_experts = num_experts

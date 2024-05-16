@@ -79,6 +79,20 @@ class PruningArguments:
         default=4,
         metadata={"help": 'Number of experts to preserve'}
     )
+    reverse_drop: Optional[bool] = field(
+        default=False,
+        metadata={"help": 'Whether to drop the experts with the highest score.'},
+    )
+    preserve_gate: Optional[bool] = field(
+        default=False,
+        metadata={"help": 'Whether to preserve the dimension of the gate. (Available only in \"post_dropping\" mode) '
+                          'If True, the gate weights of the corresponding experts will be re-ordered instead of being pruned. '
+                          'The model will dynamically drop tokens according to the gate selections instead of redirecting to other experts.'},
+    )
+    score_save_file: Optional[str] = field(
+        default=None,
+        metadata={"help": 'File to save the routing scores across layers for further analysis.'},
+    )
 
     # 🔍 For layer drop & block drop
     layer_drop_method: Optional[str] = field(

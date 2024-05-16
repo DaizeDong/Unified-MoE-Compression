@@ -1,4 +1,7 @@
 import os
+import sys
+
+sys.path = [os.getcwd()] + sys.path
 
 import uvicorn
 

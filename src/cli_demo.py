@@ -1,3 +1,8 @@
+import os
+import sys
+
+sys.path = [os.getcwd()] + sys.path
+
 from llmtuner import ChatModel
 from llmtuner.extras.misc import torch_gc
 

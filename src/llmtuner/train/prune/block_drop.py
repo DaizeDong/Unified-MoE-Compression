@@ -84,10 +84,12 @@ def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
             inputs, outputs = outputs, inputs
             print_gpu_memory(accelerator)
 
+        dtype = torch.float32 if num_samples <= 64 else torch.bfloat16
+
         all_hidden_states = []
         for i in tqdm(range(len(layers)), desc="Concatenating hidden states...", disable=not accelerator.is_main_process):
-            all_hidden_states.append(torch.cat(wrapped_layers[i].input_hidden_states, dim=0).float())  # (total_token_num, hidden_size)
-        all_hidden_states.append(torch.cat(wrapped_layers[-1].output_hidden_states, dim=0).float())
+            all_hidden_states.append(torch.cat(wrapped_layers[i].input_hidden_states, dim=0).to(dtype))  # (total_token_num, hidden_size)
+        all_hidden_states.append(torch.cat(wrapped_layers[-1].output_hidden_states, dim=0).to(dtype))
         accelerator.print(f'Total {len(all_hidden_states)} hidden states concatenated.')
 
         for i in tqdm(range(len(all_hidden_states)), desc="Calculating similarities...", disable=not accelerator.is_main_process):

@@ -4,7 +4,9 @@ import torch
 import tqdm
 from awq.modules.fused.block import MixtralBlock
 from awq.modules.fused.model import MixtralModel
-from awq.modules.fused.moe import FusedSparseMoeBlock
+# from awq.modules.fused.moe import FusedSparseMoeBlock
+from awq.modules.fused.moe import FusedDeepseekMoEBlock as FusedSparseMoeBlock
+
 from awq.modules.fused.norm import FasterTransformerRMSNorm
 from awq.modules.linear import WQLinear_GEMM
 from awq.utils.fused_utils import fuse_qkv, fuse_linears
@@ -20,7 +22,7 @@ from .deepseek_moe.modeling_deepseek import (
 class DeepseekAWQForCausalLM(BaseAWQForCausalLM):
     layer_type = "DeepseekDecoderLayer"
     max_seq_len_key = "max_position_embeddings"
-    modules_to_not_convert = ["gate", "self_attn"]  # 🔍 may exclude the first layer too.
+    # modules_to_not_convert = ["gate", "self_attn"]  # 🔍 may exclude the first layer too.
 
     @staticmethod
     def fuse_layers(model: OldDeepseekForCausalLM):
@@ -168,12 +170,12 @@ class DeepseekFuser:
             )
 
             sparse_moe = module.mlp
-            if isinstance(sparse_moe.experts[0].w1, WQLinear_GEMM):
+            if isinstance(sparse_moe, DeepseekMoE) and isinstance(sparse_moe.experts[0].gate_proj, WQLinear_GEMM):
                 fused_w1w3s = [
                     fuse_linears(
                         [
-                            sparse_moe.experts[i].w1,
-                            sparse_moe.experts[i].w3,
+                            sparse_moe.experts[i].gate_proj,
+                            sparse_moe.experts[i].up_proj,
                         ],
                         device,
                     )
@@ -185,17 +187,19 @@ class DeepseekFuser:
                 )
 
                 stacked_w2s = fuse_linears(
-                    [expert.w2 for expert in sparse_moe.experts],
+                    [expert.down_proj for expert in sparse_moe.experts],
                     device,
                     dim=0,
                     operation=torch.stack,
                 )
 
+                shared_experts = sparse_moe.shared_experts if hasattr(sparse_moe, "shared_experts") else None
                 sparse_moe = FusedSparseMoeBlock(
-                    top_k=sparse_moe.top_k,
+                    top_k=sparse_moe.gate.top_k,
                     gate=sparse_moe.gate,
                     ws=stacked_w1w3s,
                     w2s=stacked_w2s,
+                    shared_experts=shared_experts, 
                 )
 
             blocks.append(

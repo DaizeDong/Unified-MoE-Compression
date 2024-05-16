@@ -245,9 +245,14 @@ if [ $quantization_method == "GPTQ" ]; then
     --desc_act \
     --seed $seed \
     --num_samples ${n_calibration_samples} \
-    --calibration-template $calibration_template
+    --calibration-template $calibration_template \
+    --trust_remote_code \
+    --use_triton
 else
-  source activate quant
+  source activate awq
   cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ
-  python examples/quantize.py ${model_name_or_path} ${output_dir} $bits
+  python examples/quantize.py \
+    ${model_name_or_path} \
+    ${output_dir} \
+    $bits
 fi

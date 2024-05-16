@@ -397,7 +397,8 @@
   "MetaMathQA": {
     "file_name": "MetaMathQA-395K.json", 
     "columns": {
-      "prompt": "query"
+      "prompt": "query",
+      "response": "response"
     }
   },
   "Evol": {

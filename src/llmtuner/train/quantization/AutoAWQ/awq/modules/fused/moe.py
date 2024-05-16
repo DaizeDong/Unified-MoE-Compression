@@ -42,6 +42,47 @@ class FusedSparseMoeBlock(torch.nn.Module):
         return final_hidden_states.view(batch_size, sequence_length, hidden_dim)
 
 
+
+class FusedDeepseekMoEBlock(torch.nn.Module):
+    def __init__(
+        self,
+        top_k,
+        gate,
+        ws,
+        w2s,
+        shared_experts, 
+    ):
+        super().__init__()
+        self.gate = gate
+        self.top_k = top_k
+        self.ws = ws
+        self.w2s = w2s
+        self.shared_experts = shared_experts
+        
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        identity = hidden_states
+
+        # router_logits: (batch * sequence_length, n_experts)
+        _, router_logits, _ = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_dim)
+
+        final_hidden_states = apply_moe_weights(
+            self.ws,
+            self.w2s,
+            hidden_states,
+            router_logits,
+            self.top_k,
+            renormalize=True,
+        )
+        # add shared part. 
+        if self.shared_experts is not None:
+            final_hidden_states = final_hidden_states + self.shared_experts(identity)
+        return final_hidden_states.view(batch_size, sequence_length, hidden_dim)
+
+
+
+
 def apply_moe_weights(
     w1: Dict[str, torch.Tensor],
     w2: Dict[str, torch.Tensor],

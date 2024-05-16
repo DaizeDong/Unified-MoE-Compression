@@ -6,7 +6,7 @@
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=26
+#SBATCH --cpus-per-task=32
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
@@ -66,13 +66,19 @@ echo "Total GPUs: $num_processes"
 #dataset="lima"
 #prune_data_type="sft"
 
-#dataset="wikitext"
-#prune_data_type="pt"
+#dataset="MetaMathQA"
+#prune_data_type="sft"
 
 dataset="c4_train"
 prune_data_type="pt"
 
-n_calibration_samples=128
+n_calibration_samples=2
+#n_calibration_samples=4
+#n_calibration_samples=8
+#n_calibration_samples=16
+#n_calibration_samples=32
+#n_calibration_samples=64
+#n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
 #n_calibration_samples=1024
@@ -81,10 +87,10 @@ seq_len=2048
 prune_method="layer_drop"
 layer_drop_method="discrete"
 drop_n=1
-#layer_drop_norm=True
-#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
-layer_drop_norm=False
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+layer_drop_norm=True
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
+#layer_drop_norm=False
+#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${layer_drop_method}-drop${drop_n}"
@@ -123,7 +129,6 @@ srun accelerate launch \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-layer_drop_method="post_dropping"
 srun accelerate launch \
   --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
@@ -142,34 +147,34 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --layer_drop_method ${layer_drop_method} \
+  --layer_drop_method "post_dropping" \
   --drop_n ${drop_n} \
   --layer_drop_norm ${layer_drop_norm} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
-
-srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage pt \
-  --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
-  --dataset ${dataset} \
-  --finetuning_type full \
-  --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
-  --logging_steps 10 \
-  --plot_loss \
-  --bf16 \
-  --print_param_status
+###############################################################################
+#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+#
+##dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+##dataset=alpaca-gpt4_de,c4_valid
+#dataset=alpaca-gpt4_de
+#
+#srun accelerate launch \
+#  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+#  --num_processes ${num_processes} \
+#  --num_machines ${num_nodes} \
+#  --main_process_ip ${head_node_ip} \
+#  --main_process_port ${port} \
+#  src/train_bash.py \
+#  --stage pt \
+#  --do_eval \
+#  --model_name_or_path ${prune_model_save_path} \
+#  --dataset ${dataset} \
+#  --finetuning_type full \
+#  --output_dir ${output_dir} \
+#  --per_device_train_batch_size 4 \
+#  --logging_steps 10 \
+#  --plot_loss \
+#  --bf16 \
+#  --print_param_status

@@ -10,12 +10,12 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:8
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=2 # should match with --gres
+num_gpu_per_node=8 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -62,9 +62,21 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-dataset="c4_train"
-prune_data_type="pt"
+#dataset="lima"
+#prune_data_type="sft"
 
+dataset="MetaMathQA"
+prune_data_type="sft"
+
+#dataset="c4_train"
+#prune_data_type="pt"
+
+#n_calibration_samples=2
+#n_calibration_samples=4
+#n_calibration_samples=8
+#n_calibration_samples=16
+#n_calibration_samples=32
+#n_calibration_samples=64
 #n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
@@ -74,7 +86,7 @@ seq_len=2048
 prune_method="block_drop"
 #block_drop_method="consecutive"
 block_drop_method="discrete"
-drop_n=6
+drop_n=3
 similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-block-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
@@ -110,7 +122,6 @@ srun accelerate launch \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-block_drop_method="post_dropping"
 srun accelerate launch \
   --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
@@ -129,7 +140,7 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --block_drop_method ${block_drop_method} \
+  --block_drop_method "post_dropping" \
   --drop_n ${drop_n} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}

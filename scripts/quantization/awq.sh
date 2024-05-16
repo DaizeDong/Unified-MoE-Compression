@@ -66,7 +66,7 @@ echo "Total GPUs: $num_processes"
 
 # ${var##*/}
 model=Mistral-7B-v0.1
-# model=Mixtral-8x7B-v0.1
+model=Mixtral-8x7B-v0.1
 
 model_path=/mnt/petrelfs/share_data/quxiaoye/models/$model
 # model_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
@@ -76,6 +76,6 @@ bits=4
 quant_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization/$model-AWQ-${bits}bits/checkpoint
 
 source activate awq
-cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization
+cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ
 
-python AutoAWQ/examples/quantize.py $model_path $quant_path $bits
+python examples/quantize.py $model_path $quant_path $bits

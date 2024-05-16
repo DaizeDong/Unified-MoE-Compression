@@ -1,25 +1,32 @@
+import os
 import sys
 
+sys.path = [os.getcwd()] + sys.path
+transformers_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src"
 awq_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ"
 gptq_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main"
-sys.path = [awq_path, gptq_path] + sys.path
+sys.path = [transformers_path, awq_path, gptq_path] + sys.path
 
 import time
 import torch
 import argparse
 import numpy as np
 import pandas as pd
-from transformers import AutoTokenizer, GenerationConfig, LogitsProcessor, LogitsProcessorList
-from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM
+import transformers
+import awq
+import auto_gptq
 
 from awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
 from awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 from awq.models.base import BaseAWQForCausalLM
 from awq import AutoAWQForCausalLM
-
+from transformers import GenerationConfig, LogitsProcessor, LogitsProcessorList
+from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM
 from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-import auto_gptq
+from src.global_utils.io import create_dir
 
+print(transformers)
+print(awq)
 print(auto_gptq)
 
 AutoConfig.register("deepseek", DeepseekConfig)
@@ -51,9 +58,11 @@ class TimeMeasuringLogitsProcessor(LogitsProcessor):
 
         return token_durations
 
+
 def warmup(model):
-    warm_up = torch.randn((4096,4096)).to(next(model.parameters()).device)
-    torch.mm(warm_up,warm_up)
+    warm_up = torch.randn((4096, 4096)).to(next(model.parameters()).device)
+    torch.mm(warm_up, warm_up)
+
 
 def generate_torch(model, input_ids, n_generate):
     context_time = 0
@@ -70,7 +79,7 @@ def generate_torch(model, input_ids, n_generate):
             else:
                 # decode tokens
                 inputs = torch.as_tensor(token, device=next(model.parameters()).device)
-            
+
             out = model(inputs, use_cache=True)
 
             torch.cuda.synchronize()
@@ -80,8 +89,9 @@ def generate_torch(model, input_ids, n_generate):
                 context_time += time.time() - start
             else:
                 generate_time.append(time.time() - start)
-    
+
     return context_time, generate_time
+
 
 def generate_hf(model: BaseAWQForCausalLM, input_ids, n_generate):
     generation_config = GenerationConfig(
@@ -105,53 +115,84 @@ def generate_hf(model: BaseAWQForCausalLM, input_ids, n_generate):
 
     return context_time, generate_time
 
-def run_round(generator, model_path, quant_file, n_generate, input_ids, batch_size, no_safetensors, pretrained):
+
+def load_model(model_path, model_type, quant_file, n_generate, batch_size, no_safetensors, pretrained, model=None):
     print(f" -- Loading model...")
 
-    if pretrained:
-        model = AutoAWQForCausalLM.from_pretrained(
-            model_path,
-            safetensors=not no_safetensors,
-            low_cpu_mem_usage=True,
-            device_map="cuda",
-            # torch_dtype=torch.float16,
-            torch_dtype=torch.bfloat16, 
-        )
-    else:
-        # model = AutoAWQForCausalLM.from_quantized(
-        #     model_path, quant_file, fuse_layers=True,
-        #     max_seq_len=n_generate, batch_size=batch_size,
-        #     safetensors=not no_safetensors
-        # )
-        quantize_config = BaseQuantizeConfig.from_pretrained(model_path)
-        inject_fused_attention = True
-        inject_fused_mlp = True
-        use_triton = True
-        use_triton = False
-        use_safetensors = True
-        model = AutoGPTQForCausalLM.from_quantized(
-            model_path,
-            # max_memory=max_memory,
-            low_cpu_mem_usage=True,
-            use_triton=use_triton,
-            inject_fused_attention=inject_fused_attention,
-            inject_fused_mlp=inject_fused_mlp,
-            use_cuda_fp16=True,
-            quantize_config=quantize_config,
-            # model_basename=model_basename,
-            use_safetensors=use_safetensors,
-            # trust_remote_code=trust_remote_code,
-            # warmup_triton=False,
-            # disable_exllama=disable_exllama,
-        )
-        setattr(model, "quant_config", quantize_config)
+    if model_type == "normal":
+        if model is not None:  # use the last loaded model to save time
+            return model
 
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            low_cpu_mem_usage=True,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+        )
+
+    elif model_type == "quantized":
+        if pretrained:
+            model = AutoAWQForCausalLM.from_pretrained(
+                model_path,
+                safetensors=not no_safetensors,
+                low_cpu_mem_usage=True,
+                device_map="auto",
+                torch_dtype=torch.bfloat16,
+            )
+        else:
+            # AWQ
+            if "AWQ" in model_path:
+                model = AutoAWQForCausalLM.from_quantized(
+                    model_path, quant_file, fuse_layers=True,
+                    max_seq_len=n_generate, batch_size=batch_size,
+                    safetensors=not no_safetensors
+                )
+            # GPTQ
+            else:
+                quantize_config = BaseQuantizeConfig.from_pretrained(model_path)
+                inject_fused_attention = True
+                inject_fused_mlp = True
+                use_triton = True
+                use_triton = False
+                use_safetensors = True
+                model = AutoGPTQForCausalLM.from_quantized(
+                    model_path,
+                    # max_memory=max_memory,
+                    low_cpu_mem_usage=True,
+                    use_triton=use_triton,
+                    inject_fused_attention=inject_fused_attention,
+                    inject_fused_mlp=inject_fused_mlp,
+                    use_cuda_fp16=True,
+                    quantize_config=quantize_config,
+                    # model_basename=model_basename,
+                    use_safetensors=use_safetensors,
+                    # trust_remote_code=trust_remote_code,
+                    # warmup_triton=False,
+                    # disable_exllama=disable_exllama,
+                )
+                setattr(model, "quant_config", quantize_config)
+    else:
+        raise ValueError(model_type)
+
+    return model
+
+
+def run_round(generator, model, n_generate, input_ids, batch_size, pretrained):
     model.eval()
+    total_memory_used = 0
+    for device in range(torch.cuda.device_count()):
+        memory_used = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
+        total_memory_used += memory_used
+        memory_pct = memory_used / (torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)) * 100
+        print(f" ** Max Memory (device: {device}): {memory_used:.2f} GB ({memory_pct:.2f}%)")
+
+    print(f"Memory (VRAM): {total_memory_used:.2f} GB ({memory_pct:.2f}%)")
+
     print(f" -- Warming up...")
     warmup(model)
 
     print(f" -- Generating {n_generate} tokens, {input_ids.shape[1]} in context...")
-    
+
     try:
         context_time, generate_time = generator(model, input_ids, n_generate)
         successful_generate = True
@@ -180,7 +221,7 @@ def run_round(generator, model_path, quant_file, n_generate, input_ids, batch_si
     else:
         prefill_tokens_per_second = 'OOM'
         decode_tokens_per_second = 'OOM'
-    
+
     if pretrained:
         version = "FP16"
     else:
@@ -197,6 +238,7 @@ def run_round(generator, model_path, quant_file, n_generate, input_ids, batch_si
         "Memory (VRAM)": f"{total_memory_used:.2f} GB ({memory_pct:.2f}%)"
     }, version
 
+
 def main(args):
     rounds = [
         {"context": 32, "n_generate": 32},
@@ -204,9 +246,9 @@ def main(args):
         {"context": 128, "n_generate": 128},
         {"context": 256, "n_generate": 256},
         {"context": 512, "n_generate": 512},
-        {"context": 1024, "n_generate": 1024},
-        {"context": 2048, "n_generate": 2048},
-        {"context": 4096, "n_generate": 4096},
+        # {"context": 1024, "n_generate": 1024},
+        # {"context": 2048, "n_generate": 2048},
+        # {"context": 4096, "n_generate": 4096},
     ]
 
     if args.generator == "torch":
@@ -219,34 +261,52 @@ def main(args):
     all_stats = []
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
+    model = None
     for settings in rounds:
         input_ids = torch.randint(0, tokenizer.vocab_size, (args.batch_size, settings["context"])).cuda()
 
+        model = load_model(
+            args.model_path,
+            args.model_type,
+            args.quant_file,
+            settings["n_generate"],
+            args.batch_size,
+            args.no_safetensors,
+            args.pretrained,
+            model=model,
+        )
+
         stats, model_version = run_round(
             generator,
-            args.model_path,
-            args.quant_file,
+            model,
             settings["n_generate"],
             input_ids,
             args.batch_size,
-            args.no_safetensors,
             args.pretrained
         )
-        
+
         all_stats.append(stats)
 
         if stats["Prefill tokens/s"] == 'OOM':
             break
-    
+
     df = pd.DataFrame(all_stats)
+    if args.save_file is not None:
+        create_dir(os.path.dirname(args.save_file))
+        df.to_csv(args.save_file, index=False)
+        print(f"Results saved to \"{args.save_file}\"!")
     print('GPU:', torch.cuda.get_device_name())
     print('Model:', args.model_path)
     print('Version:', model_version)
     print(df.to_markdown(index=False))
+    print("Done!")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="casperhansen/mistral-7b-instruct-v0.1-awq", help="path to the model")
+    parser.add_argument("--model_type", type=str, default="quantized", choices=["normal", "quantized"], help="Type of the model")
+    parser.add_argument("--save_file", type=str, default=None, help="path to save the results")
     parser.add_argument("--quant_file", type=str, default="", help="weights filename")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for cache and generation")
     parser.add_argument("--no_safetensors", default=False, action="store_true", help="Use for disabling safetensors")

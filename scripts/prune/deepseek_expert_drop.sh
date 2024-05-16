@@ -65,8 +65,8 @@ echo "Total GPUs: $num_processes"
 #dataset="lima"
 #prune_data_type="sft"
 
-#dataset="wikitext"
-#prune_data_type="pt"
+#dataset="MetaMathQA"
+#prune_data_type="sft"
 
 dataset="c4_train"
 prune_data_type="pt"
@@ -78,17 +78,20 @@ n_calibration_samples=128
 seq_len=2048
 
 prune_method="expert_drop"
-expert_drop_method="layerwise_pruning"
-#expert_drop_method="global_pruning"
-r=56
-#r=48
-#r=40
-#r=32
-#r=24
-#r=16
+expert_drop_method="global_pruning" # layerwise_pruning global_pruning
+reverse_drop="False"                # False True
+preserve_gate="True"                # False True
+r=8                                 # 64 56 48 40 32 24 16 8 0
+score_save_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-expert-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 folder_name="DeepSeek-${prune_method}-${expert_drop_method}-r${r}"
+if [ ${reverse_drop} = "True" ]; then
+  folder_name="${folder_name}-Reversed"
+fi
+if [ ${preserve_gate} = "True" ]; then
+  folder_name="${folder_name}-DyGate"
+fi
 use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
 echo ${folder_name}
 
@@ -119,9 +122,12 @@ srun accelerate launch \
   --prune_method ${prune_method} \
   --expert_drop_method ${expert_drop_method} \
   --r ${r} \
+  --reverse_drop ${reverse_drop} \
+  --preserve_gate ${preserve_gate} \
   --prune_model_save_path ${prune_model_save_path}
 
-expert_drop_method="post_dropping"
+#--score_save_file ${score_save_file}
+
 srun accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \
   --num_processes ${num_processes} \
@@ -141,8 +147,10 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --expert_drop_method ${expert_drop_method} \
+  --expert_drop_method "post_dropping" \
   --r ${r} \
+  --reverse_drop ${reverse_drop} \
+  --preserve_gate ${preserve_gate} \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
@@ -169,5 +177,4 @@ srun accelerate launch \
   --per_device_train_batch_size 4 \
   --logging_steps 10 \
   --plot_loss \
-  --bf16 \
-  --print_param_status
+  --bf16

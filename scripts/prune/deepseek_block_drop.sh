@@ -10,12 +10,12 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:1
 #SBATCH --quotatype=auto
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=8 # should match with --gres
+num_gpu_per_node=1 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -65,16 +65,16 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-#n_calibration_samples=128
+n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
-n_calibration_samples=1024
+#n_calibration_samples=1024
 seq_len=2048
 
 prune_method="block_drop"
 #block_drop_method="consecutive"
 block_drop_method="discrete"
-drop_n=6
+drop_n=31
 similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
@@ -112,7 +112,6 @@ srun accelerate launch \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
-block_drop_method="post_dropping"
 srun accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \
   --num_processes ${num_processes} \
@@ -132,34 +131,34 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --block_drop_method ${block_drop_method} \
+  --block_drop_method "post_dropping" \
   --drop_n ${drop_n} \
   --similarity_cache_file ${similarity_cache_file} \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
-
-srun accelerate launch \
-  --config_file "config/accelerate/deepseek_normal.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage pt \
-  --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
-  --use_fast_tokenizer ${use_fast_tokenizer} \
-  --dataset ${dataset} \
-  --finetuning_type full \
-  --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
-  --logging_steps 10 \
-  --plot_loss \
-  --bf16 \
-  --print_param_status
+#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+#
+##dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+##dataset=alpaca-gpt4_de,c4_valid
+#dataset=alpaca-gpt4_de
+#
+#srun accelerate launch \
+#  --config_file "config/accelerate/deepseek_normal.yaml" \
+#  --num_processes ${num_processes} \
+#  --num_machines ${num_nodes} \
+#  --main_process_ip ${head_node_ip} \
+#  --main_process_port ${port} \
+#  src/train_bash.py \
+#  --stage pt \
+#  --do_eval \
+#  --model_name_or_path ${prune_model_save_path} \
+#  --use_fast_tokenizer ${use_fast_tokenizer} \
+#  --dataset ${dataset} \
+#  --finetuning_type full \
+#  --output_dir ${output_dir} \
+#  --per_device_train_batch_size 4 \
+#  --logging_steps 10 \
+#  --plot_loss \
+#  --bf16 \
+#  --print_param_status

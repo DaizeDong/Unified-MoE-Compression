@@ -326,7 +326,7 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
                     continue
 
                 accelerator.print(f"Pruning module {module_state_dict_name}")
-                W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
+                W_metric = (torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))).float()
                 W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
                 W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
 
@@ -479,7 +479,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
                 module_state_dict_name = f"model.layers.{i}.{name}"
                 accelerator.print(f"Pruning module {module_state_dict_name}")
                 W = wrapped_layers[name].weight.data.to(device)  # 👆 use the captured weights
-                W_metric = torch.abs(W) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
+                W_metric = (torch.abs(W) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))).float()
                 W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
                 W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
 

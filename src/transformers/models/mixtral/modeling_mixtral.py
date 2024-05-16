@@ -74,38 +74,62 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MixtralConfig"
 
 
-def is_semi_structured_weight(weight: torch.Tensor) -> bool:
-    """🔍 Check if the weight is semi-structured (1:2 or 2:4)."""
+def is_semi_structured_weight(weight: torch.Tensor, tolerance_rate: float = 5e-7) -> bool:
+    """
+    🔍 Check if the weight is semi-structured (1:2 or 2:4).
+     :param tolerance_rate: the maximum ratio of tolerated errors in checking semi-structure to counter the Floating Point Error.
+    """
+    error_tolerance_num = math.ceil(tolerance_rate * weight.numel())
+
     # Ensure the tensor is 2D.
+    # print("weight dim", weight.dim())
     if weight.dim() != 2:
         return False
 
     # Check sparsity
-    mask = (weight == 0)
-    if mask.sum().item() != weight.numel() // 2:
+    mask = (weight == 0.)
+    # print("mask", mask)
+    # print("zero_num", mask.sum().item(), "total_num", weight.numel(), "required_zero_num", weight.numel() // 2)
+    if abs(mask.sum().item() - weight.numel() // 2) > error_tolerance_num:
         return False
 
     # Check 1:2
     is_1_2 = True
-    sparse_param_count_1_2 = torch.full((weight.shape[1],), 1, dtype=torch.int64, device=weight.device)
-    for row_group in mask.split(2, dim=0):
-        # mask: shape(output_dim, input_dim)
-        # row_group: shape(2, input_dim)
-        if not torch.equal(row_group.sum(dim=0), sparse_param_count_1_2):
-            is_1_2 = False
-            break
+    if weight.shape[1] % 2 != 0:
+        is_1_2 = False
+    else:
+        error_num = 0
+        sparse_param_count_1_2 = torch.full((weight.shape[0],), 1, dtype=torch.int64, device=weight.device)
+        # print("sparse_param_count_1_2", sparse_param_count_1_2.shape, sparse_param_count_1_2)
+        for row_group in mask.split(2, dim=1):
+            # mask: shape(output_dim, input_dim)
+            # row_group: shape(output_dim, 2)
+            # print(row_group.sum(dim=1))
+            if not torch.equal(row_group.sum(dim=1), sparse_param_count_1_2):
+                error_num += 1
+                if error_num > error_tolerance_num:
+                    is_1_2 = False
+                    break
     if is_1_2:
         return True
 
     # Check 2:4
     is_2_4 = True
-    sparse_param_count_2_4 = torch.full((weight.shape[1],), 2, dtype=torch.int64, device=weight.device)
-    for row_group in mask.split(4, dim=0):
-        # mask: shape(output_dim, input_dim)
-        # row_group: shape(4, input_dim)
-        if not torch.equal(row_group.sum(dim=0), sparse_param_count_2_4):
-            is_2_4 = False
-            break
+    if weight.shape[1] % 4 != 0:
+        is_2_4 = False
+    else:
+        error_num = 0
+        sparse_param_count_2_4 = torch.full((weight.shape[0],), 2, dtype=torch.int64, device=weight.device)
+        # print("sparse_param_count_2_4", sparse_param_count_2_4.shape, sparse_param_count_2_4)
+        for row_group in mask.split(4, dim=1):
+            # mask: shape(output_dim, input_dim)
+            # row_group: shape(output_dim, 4)
+            # print(row_group.sum(dim=1))
+            if not torch.equal(row_group.sum(dim=1), sparse_param_count_2_4):
+                error_num += 1
+                if error_num > error_tolerance_num:
+                    is_2_4 = False
+                    break
     if is_2_4:
         return True
 
@@ -913,10 +937,17 @@ class MixtralSparseMoeBlock(nn.Module):
 
         # 🔍 For layer-wise expert_num
         self.num_experts = config.num_local_experts if isinstance(config.num_local_experts, int) else config.num_local_experts[layer_index]
-        self.top_k = config.num_experts_per_tok if (config.num_experts_per_tok <= self.num_experts) else self.num_experts
+
+        # 🔍 for compatibility of different gate size
+        if hasattr(config, "gate_num_experts"):
+            self.gate_num_experts = config.gate_num_experts[layer_index] if isinstance(config.gate_num_experts, list) else config.gate_num_experts
+        else:
+            self.gate_num_experts = self.num_experts
+
+        self.top_k = min(config.num_experts_per_tok, self.gate_num_experts)
 
         # gating
-        self.gate = GateLinear(self.hidden_dim, self.num_experts, bias=False)  # 🔍
+        self.gate = GateLinear(self.hidden_dim, self.gate_num_experts, bias=False)  # 🔍
         expert_layer = MixtralBlockSparseTop2MLP if mode == "static" else DynamicMixtralBLockSparseTop2MLP
         self.experts = nn.ModuleList([expert_layer(config, layer_index=layer_index, expert_index=i) for i in range(self.num_experts)])
 
@@ -1004,9 +1035,12 @@ class MixtralDecoderLayer(nn.Module):
             num_experts = config.num_local_experts if isinstance(config.num_local_experts, int) else config.num_local_experts[layer_idx]
 
         # 🔍
-        if num_experts <= 0:
+        if num_experts < 0:  # no MoE or Norm
             self.block_sparse_moe = None
             self.post_attention_layernorm = None
+        elif num_experts == 0:  # no MoE
+            self.block_sparse_moe = None
+            self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         else:
             mode = getattr(config, "mode", "static")
             if mode == "static":
@@ -1063,13 +1097,18 @@ class MixtralDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
+        # 🔍 Fully Connected
         router_logits = None
 
-        if self.post_attention_layernorm is not None:
+        if self.post_attention_layernorm is None and self.block_sparse_moe is None:
+            pass
+        elif self.block_sparse_moe is None:
             residual = hidden_states
             hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.block_sparse_moe is not None:
+            hidden_states = residual + hidden_states
+        else:
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
             hidden_states, router_logits = self.block_sparse_moe(hidden_states)
             hidden_states = residual + hidden_states
 
@@ -1430,13 +1469,14 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    def convert_semi_structured_weights(self):
+    def convert_semi_structured_weights(self, tolerance_rate: float = 1e-7):
         # 🔍 Automatically check & convert semi-structured sparse weights in the model
         for name, module in self.named_modules():
             if isinstance(module, (nn.Linear, ExpertLinear, GateLinear)):
-                if is_semi_structured_weight(module.weight.data):
+                if is_semi_structured_weight(module.weight.data, tolerance_rate=tolerance_rate):
                     module.weight = nn.Parameter(to_sparse_semi_structured(module.weight))
                     print(f"Converted {name} weights to semi-structured weights")
+        return self
 
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

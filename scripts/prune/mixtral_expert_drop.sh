@@ -65,14 +65,18 @@ echo "Total GPUs: $num_processes"
 #dataset="lima"
 #prune_data_type="sft"
 
-#dataset="wikitext"
-#prune_data_type="pt"
+#dataset="MetaMathQA"
+#prune_data_type="sft"
 
 dataset="c4_train"
-# dataset="MetaMathQA"
-# dataset="codealpaca"
 prune_data_type="pt"
 
+#n_calibration_samples=2
+#n_calibration_samples=4
+#n_calibration_samples=8
+#n_calibration_samples=16
+#n_calibration_samples=32
+#n_calibration_samples=64
 n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
@@ -80,12 +84,20 @@ n_calibration_samples=128
 seq_len=2048
 
 prune_method="expert_drop"
-expert_drop_method="layerwise_pruning"
-#expert_drop_method="global_pruning"
-r=5
+expert_drop_method="global_pruning" # layerwise_pruning global_pruning
+reverse_drop="False"                # False True
+preserve_gate="False"               # False True
+r=0                                 # 8 7 6 5 4 3 2 1 0
+score_save_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-expert-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${expert_drop_method}-r${r}"
+if [ ${reverse_drop} = "True" ]; then
+  folder_name="${folder_name}-Reversed"
+fi
+if [ ${preserve_gate} = "True" ]; then
+  folder_name="${folder_name}-DyGate"
+fi
 echo ${folder_name}
 
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
@@ -114,9 +126,11 @@ srun accelerate launch \
   --prune_method ${prune_method} \
   --expert_drop_method ${expert_drop_method} \
   --r ${r} \
+  --reverse_drop ${reverse_drop} \
+  --preserve_gate ${preserve_gate} \
   --prune_model_save_path ${prune_model_save_path}
+#  --score_save_file ${score_save_file}
 
-expert_drop_method="post_dropping"
 srun accelerate launch \
   --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
@@ -135,35 +149,34 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --expert_drop_method ${expert_drop_method} \
+  --expert_drop_method "post_dropping" \
   --r ${r} \
+  --reverse_drop ${reverse_drop} \
+  --preserve_gate ${preserve_gate} \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
-# output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
 
-# #dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-# #dataset=alpaca-gpt4_de,c4_valid
-# dataset=alpaca-gpt4_de
+#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+#dataset=alpaca-gpt4_de,c4_valid
+dataset=alpaca-gpt4_de
 
-# srun accelerate launch \
-#   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-#   --num_processes ${num_processes} \
-#   --num_machines ${num_nodes} \
-#   --main_process_ip ${head_node_ip} \
-#   --main_process_port ${port} \
-#   src/train_bash.py \
-#   --stage pt \
-#   --do_eval \
-#   --model_name_or_path ${prune_model_save_path} \
-#   --dataset ${dataset} \
-#   --finetuning_type full \
-#   --output_dir ${output_dir} \
-#   --per_device_train_batch_size 4 \
-#   --logging_steps 10 \
-#   --plot_loss \
-#   --bf16 \
-#   --expert_drop_method ${expert_drop_method} \
-#   --print_param_status
-
-# rm -rf ${prune_model_save_path}
+srun accelerate launch \
+  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --num_processes ${num_processes} \
+  --num_machines ${num_nodes} \
+  --main_process_ip ${head_node_ip} \
+  --main_process_port ${port} \
+  src/train_bash.py \
+  --stage pt \
+  --do_eval \
+  --model_name_or_path ${prune_model_save_path} \
+  --dataset ${dataset} \
+  --finetuning_type full \
+  --output_dir ${output_dir} \
+  --per_device_train_batch_size 4 \
+  --logging_steps 10 \
+  --plot_loss \
+  --bf16 \
+  --expert_drop_method ${expert_drop_method}
