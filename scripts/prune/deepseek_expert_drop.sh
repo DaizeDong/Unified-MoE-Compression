@@ -80,8 +80,8 @@ seq_len=2048
 prune_method="expert_drop"
 expert_drop_method="global_pruning" # layerwise_pruning global_pruning
 reverse_drop="False"                # False True
-preserve_gate="True"                # False True
-r=8                                 # 64 56 48 40 32 24 16 8 0
+preserve_gate="False"               # False True
+r=52                                # 64 56 48 40 32 24 16 8 0
 score_save_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-expert-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
@@ -125,8 +125,7 @@ srun accelerate launch \
   --reverse_drop ${reverse_drop} \
   --preserve_gate ${preserve_gate} \
   --prune_model_save_path ${prune_model_save_path}
-
-#--score_save_file ${score_save_file}
+#--score_save_file ${score_save_file} # This is for analysis use only, must be used with "layerwise_pruning".
 
 srun accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \

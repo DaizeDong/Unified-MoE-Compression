@@ -46,14 +46,23 @@ def load_model_and_tokenizer(
         "token": model_args.hf_hub_token,
         "attn_implementation": "flash_attention_2",  # 🔍
     }
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
-        use_fast=model_args.use_fast_tokenizer,
-        split_special_tokens=model_args.split_special_tokens,
-        padding_side="right",
-        **config_kwargs,
-    )
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path,
+            use_fast=model_args.use_fast_tokenizer,
+            split_special_tokens=model_args.split_special_tokens,
+            padding_side="right",
+            **config_kwargs,
+        )
+    except:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path,
+            use_fast=not model_args.use_fast_tokenizer,
+            split_special_tokens=model_args.split_special_tokens,
+            padding_side="right",
+            **config_kwargs,
+        )
+        
     patch_tokenizer(tokenizer)
 
     config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
@@ -83,19 +92,28 @@ def load_model_and_tokenizer(
             logger.warning("Unsloth does not support loading adapters.")
 
     if model is None:
-        if not model_args.autogptq:
-            model = AutoModelForCausalLM.from_pretrained(
+        if model_args.autoawq:
+            import sys
+            original_path = sys.path
+            trust_remote_code = True
+            sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ"] + sys.path
+            from awq import AutoAWQForCausalLM
+
+            model = AutoAWQForCausalLM.from_quantized(
                 model_args.model_name_or_path,
-                config=config,
-                torch_dtype=model_args.compute_dtype,
-                low_cpu_mem_usage=(not is_deepspeed_zero3_enabled()),
-                **config_kwargs,
+                trust_remote_code=trust_remote_code,
+                # model_basename=None if autogptq is True else Path(autogptq).stem,
+                safetensors=True
+                if model_args.autoawq is True
+                else model_args.autoawq.endswith(".safetensors"),
             )
-        else:
+            sys.path = original_path
+            
+        elif model_args.autogptq:
             import sys
             sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main"] + sys.path
             from auto_gptq import AutoGPTQForCausalLM
-
+            
             model = AutoGPTQForCausalLM.from_quantized(
                 model_args.model_name_or_path,
                 trust_remote_code=False,
@@ -105,7 +123,16 @@ def load_model_and_tokenizer(
                 else model_args.autogptq.endswith(".safetensors"),
                 # **model_kwargs,
             )
-
+            
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_args.model_name_or_path,
+                config=config,
+                torch_dtype=model_args.compute_dtype,
+                low_cpu_mem_usage=(not is_deepspeed_zero3_enabled()),
+                **config_kwargs,
+            )
+            
     patch_model(model, tokenizer, model_args, is_trainable)
     register_autoclass(config, model, tokenizer)
 

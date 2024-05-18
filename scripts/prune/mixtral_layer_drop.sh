@@ -72,13 +72,13 @@ echo "Total GPUs: $num_processes"
 dataset="c4_train"
 prune_data_type="pt"
 
-n_calibration_samples=2
+#n_calibration_samples=2
 #n_calibration_samples=4
 #n_calibration_samples=8
 #n_calibration_samples=16
 #n_calibration_samples=32
 #n_calibration_samples=64
-#n_calibration_samples=128
+n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
 #n_calibration_samples=1024
@@ -86,11 +86,14 @@ seq_len=2048
 
 prune_method="layer_drop"
 layer_drop_method="discrete"
-drop_n=1
-layer_drop_norm=True
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
-#layer_drop_norm=False
-#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+drop_n=6
+layer_drop_norm="True"
+#layer_drop_norm="False"
+if [ ${similarity_cache_file} = "True" ]; then
+  similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
+else
+  similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+fi
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${layer_drop_method}-drop${drop_n}"

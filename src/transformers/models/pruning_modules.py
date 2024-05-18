@@ -5,7 +5,7 @@ from torch import nn
 class ExpertLinear(nn.Linear):
     """🔍 This is for pruning. (forward with scores for hooks to capture)"""
 
-    def forward(self, input: torch.Tensor, routing_scores: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, routing_scores: torch.Tensor = None) -> torch.Tensor:
         return super().forward(input)
 
 

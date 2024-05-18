@@ -19,6 +19,7 @@
 # limitations under the License.
 """ PyTorch DeepSeek model."""
 import math
+import sys
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -27,6 +28,12 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+transformers_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src"
+sys.path = [transformers_path] + sys.path
+import transformers
+
+print(transformers)
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -38,7 +45,7 @@ from transformers.modeling_attn_mask_utils import (
 )
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
-# from transformers.models.pruning_modules import ExpertLinear
+from transformers.models.pruning_modules import ExpertLinear
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from transformers.utils import (
     add_start_docstrings,
@@ -98,11 +105,11 @@ def _make_causal_mask(
     )
 
 
-class ExpertLinear(nn.Linear):
-    """🔍 This is for pruning. (forward with scores for hooks to capture)"""
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return super().forward(input)
+# class ExpertLinear(nn.Linear):
+#     """🔍 This is for pruning. (forward with scores for hooks to capture)"""
+#
+#     def forward(self, input: torch.Tensor, routing_scores: torch.Tensor = None) -> torch.Tensor:
+#         return super().forward(input)
 
 
 class DeepseekRMSNorm(nn.Module):
@@ -258,7 +265,7 @@ class DeepseekMLP(nn.Module):
         self.down_proj = ExpertLinear(self.intermediate_size, self.hidden_size, bias=False)  # 🔍
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, x, routing_scores=None):
         if self.config.pretraining_tp > 1:
             # 🔍 TODO: tp support
             slice = self.intermediate_size // self.config.pretraining_tp
@@ -275,7 +282,8 @@ class DeepseekMLP(nn.Module):
             ]
             down_proj = sum(down_proj)
         else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            # 🔍 forward with routing scores for capturing
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x, routing_scores)) * self.up_proj(x, routing_scores), routing_scores)
 
         return down_proj
 
@@ -288,10 +296,10 @@ class MoEGate(nn.Module):
         # 🔍 for compatibility of different gate size
         if hasattr(config, "gate_num_experts"):
             self.n_routed_experts = config.gate_num_experts[layer_idx] if isinstance(config.gate_num_experts, list) else config.gate_num_experts
+            self.top_k = config.num_experts_per_tok
         else:
             self.n_routed_experts = config.n_routed_experts[layer_idx] if isinstance(config.n_routed_experts, list) else config.n_routed_experts
-
-        self.top_k = min(config.num_experts_per_tok, self.n_routed_experts)
+            self.top_k = min(config.num_experts_per_tok, self.n_routed_experts)
 
         self.scoring_func = config.scoring_func
         self.alpha = config.aux_loss_alpha

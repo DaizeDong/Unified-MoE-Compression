@@ -126,7 +126,13 @@ class ModelArguments:
             "help": "whether to use autogptq."
         },
     )
-    
+    autoawq: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "whether to use autoawq."
+        },
+    )
+
     def __post_init__(self):
         self.compute_dtype = None
         self.model_max_length = None

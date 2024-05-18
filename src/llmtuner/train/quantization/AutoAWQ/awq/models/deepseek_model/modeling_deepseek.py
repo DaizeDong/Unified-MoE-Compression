@@ -19,6 +19,7 @@
 # limitations under the License.
 """ PyTorch DeepSeek model."""
 import math
+import sys
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -27,6 +28,12 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+transformers_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src"
+sys.path = [transformers_path] + sys.path
+import transformers
+
+print(transformers)
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -267,8 +274,7 @@ class DeepseekMLP(nn.Module):
             ]
             down_proj = sum(down_proj)
         else:
-            # 🔍 forward with routing scores for capturing
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x, routing_scores)) * self.up_proj(x, routing_scores), routing_scores)
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
         return down_proj
 
@@ -281,10 +287,10 @@ class MoEGate(nn.Module):
         # 🔍 for compatibility of different gate size
         if hasattr(config, "gate_num_experts"):
             self.n_routed_experts = config.gate_num_experts[layer_idx] if isinstance(config.gate_num_experts, list) else config.gate_num_experts
+            self.top_k = config.num_experts_per_tok
         else:
             self.n_routed_experts = config.n_routed_experts[layer_idx] if isinstance(config.n_routed_experts, list) else config.n_routed_experts
-
-        self.top_k = min(config.num_experts_per_tok, self.n_routed_experts)
+            self.top_k = min(config.num_experts_per_tok, self.n_routed_experts)
 
         self.scoring_func = config.scoring_func
         self.alpha = config.aux_loss_alpha

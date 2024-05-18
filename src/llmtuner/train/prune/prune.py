@@ -222,7 +222,7 @@ def prune_wanda_moe(args, model, dataloader, accelerator: Accelerator, num_sampl
                 wrapped_layers[name].add_batch(input[0].data, output.data)
 
             def moe_hook(_, input, output):
-                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data)  # 🔍 input[1] is routing scores.
+                wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if (len(input) >= 2 and input[1] is not None) else None)  # 🔍 input[1] is routing scores.
 
             if 'experts' in name:
                 return moe_hook
@@ -461,7 +461,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
 
             def add_batch_experts(name):
                 def hook(_, input, output):
-                    wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if input[1] is not None else None)  # 🔍 input[1] is routing scores.
+                    wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if (len(input) >= 2 and input[1] is not None) else None)  # 🔍 input[1] is routing scores.
 
                 return hook
 

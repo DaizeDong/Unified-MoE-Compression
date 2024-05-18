@@ -210,6 +210,7 @@ def post_block_drop(prune_model_save_path, model, tokenizer, layer_id_mapping, a
         accelerator.print("Saving...")
         new_model.save_pretrained(prune_model_save_path)
         tokenizer.save_pretrained(prune_model_save_path)
+        new_config.save_pretrained(prune_model_save_path)
 
     accelerator.wait_for_everyone()
     accelerator.print(f"Model saved to {prune_model_save_path}")

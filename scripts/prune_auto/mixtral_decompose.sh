@@ -9,7 +9,7 @@ output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folde
 prune_model_save_path=${output_dir}/checkpoint
 
 sbatch --quotatype auto \
-  /mnt/petrelfs/dongdaize.d/workspace/compression/scripts/prune/mixtral_decompose_args_launch.sh \
+  /mnt/petrelfs/dongdaize.d/workspace/compression/scripts/prune_auto/args_launch/mixtral_decompose_args_launch.sh \
   ${sparsity_ratio} \
   ${model_name_or_path} \
   ${output_dir} \

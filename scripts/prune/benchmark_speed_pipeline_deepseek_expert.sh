@@ -72,7 +72,7 @@ seq_len=2048
 prune_method="expert_drop"
 expert_drop_method="global_pruning" # layerwise_pruning global_pruning
 reverse_drop="False"                # False True
-preserve_gate="True"                # False True
+preserve_gate="False"               # False True
 
 for ((r = 60; r >= 0; r -= 4)); do
   model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek

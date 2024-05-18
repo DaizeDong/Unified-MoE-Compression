@@ -70,9 +70,9 @@ n_calibration_samples=128
 seq_len=2048
 
 prune_method="expert_drop"
-expert_drop_method="global_pruning" # layerwise_pruning global_pruning
-reverse_drop="False"                # False True
-preserve_gate="True"                # False True
+expert_drop_method="layerwise_pruning" # layerwise_pruning global_pruning
+reverse_drop="False"                   # False True
+preserve_gate="False"                  # False True
 
 for r in {7..0}; do
   model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1

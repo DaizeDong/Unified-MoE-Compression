@@ -79,11 +79,14 @@ seq_len=2048
 
 prune_method="layer_drop"
 layer_drop_method="discrete"
-drop_n=3
-layer_drop_norm=True
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
-#layer_drop_norm=False
-#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+drop_n=4
+layer_drop_norm="True"
+#layer_drop_norm="False"
+if [ ${similarity_cache_file} = "True" ]; then
+  similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
+else
+  similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+fi
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 folder_name="DeepSeek-${prune_method}-${layer_drop_method}-drop${drop_n}"
