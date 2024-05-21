@@ -122,14 +122,15 @@ class MixtralFuser:
             norm_1 = FasterTransformerRMSNorm(
                 module.input_layernorm.weight, module.input_layernorm.variance_epsilon
             )
-
-            norm_2 = FasterTransformerRMSNorm(
-                module.post_attention_layernorm.weight,
-                module.post_attention_layernorm.variance_epsilon,
-            )
+            norm_2 = None
+            if module.post_attention_layernorm is not None:
+                norm_2 = FasterTransformerRMSNorm(
+                    module.post_attention_layernorm.weight,
+                    module.post_attention_layernorm.variance_epsilon,
+                )
 
             sparse_moe = module.block_sparse_moe
-            if isinstance(sparse_moe.experts[0].w1, WQLinear_GEMM):
+            if sparse_moe is not None and isinstance(sparse_moe.experts[0].w1, WQLinear_GEMM):
                 fused_w1w3s = [
                     fuse_linears(
                         [

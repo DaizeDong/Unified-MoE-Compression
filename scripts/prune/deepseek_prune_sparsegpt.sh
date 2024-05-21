@@ -78,9 +78,9 @@ n_calibration_samples=128
 seq_len=2048
 
 prune_method="sparsegpt"
-sparsity_type="unstructured"
+#sparsity_type="unstructured"
 #sparsity_type="4:8"
-#sparsity_type="2:4"
+sparsity_type="2:4"
 #sparsity_type="structured"
 sparsity_ratio=0.5
 

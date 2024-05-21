@@ -87,11 +87,14 @@ prune_method="expert_drop"
 expert_drop_method="global_pruning" # layerwise_pruning global_pruning
 reverse_drop="False"                # False True
 preserve_gate="False"               # False True
-r=6                                 # 8 7 6 5 4 3 2 1 0
+r=2                                 # 8 7 6 5 4 3 2 1 0
 score_save_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-expert-${dataset}-${n_calibration_samples}samples.pt"
 
+# expert drop from scratch
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+model=Mixtral
 folder_name="Mixtral-${prune_method}-${expert_drop_method}-r${r}"
+
 if [ ${reverse_drop} = "True" ]; then
   folder_name="${folder_name}-Reversed"
 fi

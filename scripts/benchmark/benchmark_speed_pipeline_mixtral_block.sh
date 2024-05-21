@@ -1,22 +1,22 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=bp_dl
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --job-name=speed_mb
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_benchmark/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_benchmark/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --quotatype=auto
 # SBATCH --quotatype=reserved
 # reserved spot auto
 
 num_nodes=1        # should match with --nodes
-num_gpu_per_node=1 # should match with --gres
+num_gpu_per_node=2 # should match with --gres
 export OMP_NUM_THREADS=8
 export LOGLEVEL=INFO
 
@@ -69,21 +69,15 @@ prune_data_type="pt"
 n_calibration_samples=128
 seq_len=2048
 
-prune_method="layer_drop"
-layer_drop_method="discrete"
-layer_drop_norm=True
-similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
-#layer_drop_norm=False
-#similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+prune_method="block_drop"
+#block_drop_method="consecutive"
+block_drop_method="discrete"
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-block-${dataset}-${n_calibration_samples}samples.pt"
 
 #for drop_n in {1..12}; do
 for drop_n in {13..31}; do
-  model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-  folder_name="DeepSeek-${prune_method}-${layer_drop_method}-drop${drop_n}"
-  if [ ${layer_drop_norm} = "False" ]; then
-    folder_name="${folder_name}-NoNorm"
-  fi
-  use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
+  model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+  folder_name="Mixtral-${prune_method}-${block_drop_method}-drop${drop_n}"
   echo ${folder_name}
 
   output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
@@ -93,7 +87,7 @@ for drop_n in {13..31}; do
   cd /mnt/petrelfs/dongdaize.d/workspace/compression
 
   srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --config_file "config/accelerate/mixtral_deepspeed.yaml" \
     --num_processes ${num_processes} \
     --num_machines ${num_nodes} \
     --main_process_ip ${head_node_ip} \
@@ -101,7 +95,6 @@ for drop_n in {13..31}; do
     src/train_bash.py \
     --stage prune \
     --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
     --dataset ${dataset} \
     --split "train" \
     --prune_data_type ${prune_data_type} \
@@ -111,14 +104,13 @@ for drop_n in {13..31}; do
     --bf16 \
     --n_calibration_samples ${n_calibration_samples} \
     --prune_method ${prune_method} \
-    --layer_drop_method ${layer_drop_method} \
+    --block_drop_method ${block_drop_method} \
     --drop_n ${drop_n} \
-    --layer_drop_norm ${layer_drop_norm} \
     --similarity_cache_file ${similarity_cache_file} \
     --prune_model_save_path ${prune_model_save_path}
 
   srun accelerate launch \
-    --config_file "config/accelerate/deepseek_normal.yaml" \
+    --config_file "config/accelerate/mixtral_normal.yaml" \
     --num_processes ${num_processes} \
     --num_machines ${num_nodes} \
     --main_process_ip ${head_node_ip} \
@@ -126,7 +118,6 @@ for drop_n in {13..31}; do
     src/train_bash.py \
     --stage prune \
     --model_name_or_path ${model_name_or_path} \
-    --use_fast_tokenizer ${use_fast_tokenizer} \
     --dataset ${dataset} \
     --split "train" \
     --prune_data_type ${prune_data_type} \
@@ -136,9 +127,8 @@ for drop_n in {13..31}; do
     --bf16 \
     --n_calibration_samples ${n_calibration_samples} \
     --prune_method ${prune_method} \
-    --layer_drop_method "post_dropping" \
+    --block_drop_method "post_dropping" \
     --drop_n ${drop_n} \
-    --layer_drop_norm ${layer_drop_norm} \
     --similarity_cache_file ${similarity_cache_file} \
     --prune_model_save_path ${prune_model_save_path}
 

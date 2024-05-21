@@ -145,6 +145,8 @@ def discrete_block_dropping(args: Namespace, model: MixtralForCausalLM, dataload
     drop_n = args.drop_n
 
     similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
+    # similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=None)
+
     similarities_drop_1 = similarities[:, 0].view(-1)
     sorted_similarities, sorted_layer_id = torch.sort(similarities_drop_1, dim=0, descending=True)
     accelerator.print(f"similarities_drop_1: {similarities_drop_1}")
@@ -201,9 +203,14 @@ def post_block_drop(prune_model_save_path, model, tokenizer, layer_id_mapping, a
         accelerator.print("new_config", new_config)
 
         # Model
-        new_model = type(model)(new_config)
+        # type(model).from_
+        # new_model = type(model)(new_config)
+        new_model = model
+        new_model.model.layers = model.model.layers[:len(preserved_layers)]
+        
         new_model.load_state_dict(save_state_dict, strict=True)
-        new_model.bfloat16()
+        if not hasattr(new_model, "quantization_config"):
+            new_model.bfloat16()
         accelerator.print("new_model", new_model)
 
         # Save

@@ -86,10 +86,10 @@ seq_len=2048
 
 prune_method="layer_drop"
 layer_drop_method="discrete"
-drop_n=6
+drop_n=8
 layer_drop_norm="True"
 #layer_drop_norm="False"
-if [ ${similarity_cache_file} = "True" ]; then
+if [ ${layer_drop_norm} = "True" ]; then
   similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples.pt"
 else
   similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"

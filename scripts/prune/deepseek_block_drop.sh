@@ -74,7 +74,7 @@ seq_len=2048
 prune_method="block_drop"
 #block_drop_method="consecutive"
 block_drop_method="discrete"
-drop_n=3
+drop_n=4
 similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-block-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek

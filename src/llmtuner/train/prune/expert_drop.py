@@ -129,6 +129,7 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                         accelerator.print(f"layer {i} scores: {scores}")
 
                         _, experts_to_drop = torch.topk(scores, this_layer_num_experts - args.r, largest=args.reverse_drop)
+                        accelerator.print("largest:", args.reverse_drop, bool(args.reverse_drop))
                         experts_to_drop = experts_to_drop.tolist()
                         accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
                         experts_to_preserve = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_drop)))
@@ -321,6 +322,7 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
             accelerator.print(f"global_scores: {global_scores}")
 
             _, experts_to_drop = torch.topk(global_scores, num_experts_to_drop, largest=args.reverse_drop)
+            accelerator.print("largest:", args.reverse_drop, bool(args.reverse_drop))
             experts_to_drop = sorted(experts_to_drop.tolist())
             accelerator.print(f"experts_to_drop: {experts_to_drop}")
 

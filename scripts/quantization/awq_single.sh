@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=gptq
+#SBATCH --job-name=AWQ
 #SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization//%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
@@ -63,30 +63,12 @@ echo "Total Nodes: $num_nodes"
 echo "Total GPUs: $num_processes"
 
 ##############################################################################
-source ~/anaconda3/bin/activate awq
-cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/zeroShot
 
-model_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
-# model_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-
-# model=/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1
-# model=/mnt/petrelfs/share_data/quxiaoye/models/Llama_2_13b_chat
-# model_path=/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1
-model=${model_path##*/}
-
-quantized_model_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization
+# ${var##*/}
+model_path=$1
+quant_path=$2
 bits=4
-seed=0
-num_samples=16
-# calibration_template=llama-2
-calibration_template=mistral
-calibration_template=default
 
-abbreviation=${model##*/}-GPTQ-${bits}bits/checkpoint
-
-python gptq_auto.py --pretrained_model_dir $model_path --quantized_model_dir $quantized_model_dir/$abbreviation \
-  --bits $bits --save_and_reload --desc_act \
-  --seed $seed --num_samples $num_samples \
-  --calibration-template $calibration_template \
-  --trust_remote_code \
-  --use_triton \
+source ~/anaconda3/bin/activate awq
+cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ
+python examples/quantize.py $model_path $quant_path $bits

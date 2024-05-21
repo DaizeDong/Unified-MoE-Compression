@@ -85,6 +85,8 @@ sparsity_ratio=0.5
 
 model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
 folder_name="Mixtral-${prune_method}-${dataset}-${sparsity_type}-${sparsity_ratio}-${n_calibration_samples}-NoAttn"
+echo ${folder_name}
+
 output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
 
@@ -114,28 +116,26 @@ srun accelerate launch \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
-
-srun accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage pt \
-  --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
-  --dataset ${dataset} \
-  --finetuning_type full \
-  --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
-  --logging_steps 10 \
-  --plot_loss \
-  --bf16
-
-#  --print_param_status \
+#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+#
+##dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+##dataset=alpaca-gpt4_de,c4_valid
+#dataset=alpaca-gpt4_de
+#
+#srun accelerate launch \
+#  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+#  --num_processes ${num_processes} \
+#  --num_machines ${num_nodes} \
+#  --main_process_ip ${head_node_ip} \
+#  --main_process_port ${port} \
+#  src/train_bash.py \
+#  --stage pt \
+#  --do_eval \
+#  --model_name_or_path ${prune_model_save_path} \
+#  --dataset ${dataset} \
+#  --finetuning_type full \
+#  --output_dir ${output_dir} \
+#  --per_device_train_batch_size 4 \
+#  --logging_steps 10 \
+#  --plot_loss \
+#  --bf16

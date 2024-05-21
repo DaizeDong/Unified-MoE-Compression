@@ -93,10 +93,12 @@ def load_model_and_tokenizer(
 
     if model is None:
         if model_args.autoawq:
-            import sys
-            original_path = sys.path
+            # import sys
+            import awq
+            print(f"awq: {awq}")
+            # original_path = sys.path
             trust_remote_code = True
-            sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ"] + sys.path
+
             from awq import AutoAWQForCausalLM
 
             model = AutoAWQForCausalLM.from_quantized(
@@ -107,7 +109,7 @@ def load_model_and_tokenizer(
                 if model_args.autoawq is True
                 else model_args.autoawq.endswith(".safetensors"),
             )
-            sys.path = original_path
+            # sys.path = original_path
             
         elif model_args.autogptq:
             import sys

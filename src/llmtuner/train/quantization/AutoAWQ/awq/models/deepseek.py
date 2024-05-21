@@ -163,14 +163,15 @@ class DeepseekFuser:
             norm_1 = FasterTransformerRMSNorm(
                 module.input_layernorm.weight, module.input_layernorm.variance_epsilon
             )
-
-            norm_2 = FasterTransformerRMSNorm(
-                module.post_attention_layernorm.weight,
-                module.post_attention_layernorm.variance_epsilon,
-            )
+            norm_2 = None
+            if module.post_attention_layernorm.weight is not None:
+                norm_2 = FasterTransformerRMSNorm(
+                    module.post_attention_layernorm.weight,
+                    module.post_attention_layernorm.variance_epsilon,
+                )
 
             sparse_moe = module.mlp
-            if isinstance(sparse_moe, DeepseekMoE) and isinstance(sparse_moe.experts[0].gate_proj, WQLinear_GEMM):
+            if sparse_moe is not None and isinstance(sparse_moe, DeepseekMoE) and isinstance(sparse_moe.experts[0].gate_proj, WQLinear_GEMM):
                 fused_w1w3s = [
                     fuse_linears(
                         [

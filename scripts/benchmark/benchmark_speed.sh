@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=ben
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --job-name=speed
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_benchmark/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_benchmark/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1

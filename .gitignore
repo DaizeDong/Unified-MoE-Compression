@@ -175,3 +175,4 @@ cache/
 /logs_quantization/
 /models/
 /results_speedup/
+/logs_benchmark/

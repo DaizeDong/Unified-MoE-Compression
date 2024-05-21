@@ -75,7 +75,7 @@ bits=4
 
 quant_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization/$model-AWQ-${bits}bits/checkpoint
 
-source activate awq
+source ~/anaconda3/bin/activate awq
 cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ
 
 python examples/quantize.py $model_path $quant_path $bits

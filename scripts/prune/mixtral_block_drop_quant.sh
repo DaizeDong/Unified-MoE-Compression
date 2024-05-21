@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=layer
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_prune/%x-%j.log
+#SBATCH --job-name=block
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_assemble/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_assemble/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=26
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
@@ -65,45 +65,56 @@ echo "Total GPUs: $num_processes"
 #dataset="lima"
 #prune_data_type="sft"
 
-#dataset="wikitext"
-#prune_data_type="pt"
+#dataset="MetaMathQA"
+#prune_data_type="sft"
 
 dataset="c4_train"
 prune_data_type="pt"
 
+#n_calibration_samples=2
+#n_calibration_samples=4
+#n_calibration_samples=8
+#n_calibration_samples=16
+#n_calibration_samples=32
+#n_calibration_samples=64
 n_calibration_samples=128
 #n_calibration_samples=256
 #n_calibration_samples=512
 #n_calibration_samples=1024
 seq_len=2048
 
-prune_method="layer_drop"
-layer_drop_method="discrete"
-drop_n=4
-layer_drop_norm="True"
-#layer_drop_norm="False"
-if [ ${layer_drop_norm} = "True" ]; then
-  similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
-else
-  similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
-fi
+prune_method="block_drop"
+#block_drop_method="consecutive"
+# block_drop_method="discrete"
+# drop_n=5
 
-model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
-folder_name="DeepSeek-${prune_method}-${layer_drop_method}-drop${drop_n}"
-if [ ${layer_drop_norm} = "False" ]; then
-  folder_name="${folder_name}-NoNorm"
-fi
-use_fast_tokenizer="True" # 🔍 necessary for DeepSeek
+# similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/Mixtral-block-${dataset}-${n_calibration_samples}samples.pt"
+# model_name_or_path=/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1
+# folder_name="Mixtral-${prune_method}-${block_drop_method}-drop${drop_n}"
+
+model_name_or_path=$1
+block_drop_method=$2
+drop_n=$3
+
+model=${model_name_or_path##*/}
+model_name_or_path=$model_name_or_path/checkpoint
+folder_name="${model}-${prune_method}-${block_drop_method}-drop${drop_n}"
+similarity_cache_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_assemble/cache/$model-block-${dataset}-${n_calibration_samples}samples.pt"
+
+
 echo ${folder_name}
 
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/${folder_name}
+output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_assemble/${folder_name}
 prune_model_save_path=${output_dir}/checkpoint
 
-source ~/anaconda3/bin/activate compression
+# source ~/anaconda3/bin/activate compression
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
+mkdir $output_dir
+mkdir $output_dir/checkpoint
+cp $model_name_or_path/quantize_config.json $output_dir/checkpoint/quantize_config.json
 
 srun accelerate launch \
-  --config_file "config/accelerate/deepseek_normal.yaml" \
+  --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
@@ -111,7 +122,6 @@ srun accelerate launch \
   src/train_bash.py \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
-  --use_fast_tokenizer ${use_fast_tokenizer} \
   --dataset ${dataset} \
   --split "train" \
   --prune_data_type ${prune_data_type} \
@@ -121,14 +131,13 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --layer_drop_method ${layer_drop_method} \
+  --block_drop_method ${block_drop_method} \
   --drop_n ${drop_n} \
-  --layer_drop_norm ${layer_drop_norm} \
+  --prune_model_save_path ${prune_model_save_path} \
   --similarity_cache_file ${similarity_cache_file} \
-  --prune_model_save_path ${prune_model_save_path}
 
 srun accelerate launch \
-  --config_file "config/accelerate/deepseek_normal.yaml" \
+  --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   --main_process_ip ${head_node_ip} \
@@ -136,7 +145,6 @@ srun accelerate launch \
   src/train_bash.py \
   --stage prune \
   --model_name_or_path ${model_name_or_path} \
-  --use_fast_tokenizer ${use_fast_tokenizer} \
   --dataset ${dataset} \
   --split "train" \
   --prune_data_type ${prune_data_type} \
@@ -146,35 +154,9 @@ srun accelerate launch \
   --bf16 \
   --n_calibration_samples ${n_calibration_samples} \
   --prune_method ${prune_method} \
-  --layer_drop_method "post_dropping" \
+  --block_drop_method "post_dropping" \
   --drop_n ${drop_n} \
-  --layer_drop_norm ${layer_drop_norm} \
+  --prune_model_save_path ${prune_model_save_path} \
   --similarity_cache_file ${similarity_cache_file} \
-  --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
-#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-#
-##dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-##dataset=alpaca-gpt4_de,c4_valid
-#dataset=alpaca-gpt4_de
-#
-#srun accelerate launch \
-#  --config_file "config/accelerate/deepseek_normal.yaml" \
-#  --num_processes ${num_processes} \
-#  --num_machines ${num_nodes} \
-#  --main_process_ip ${head_node_ip} \
-#  --main_process_port ${port} \
-#  src/train_bash.py \
-#  --stage pt \
-#  --do_eval \
-#  --model_name_or_path ${prune_model_save_path} \
-#  --use_fast_tokenizer ${use_fast_tokenizer} \
-#  --dataset ${dataset} \
-#  --finetuning_type full \
-#  --output_dir ${output_dir} \
-#  --per_device_train_batch_size 4 \
-#  --logging_steps 10 \
-#  --plot_loss \
-#  --bf16 \
-#  --print_param_status

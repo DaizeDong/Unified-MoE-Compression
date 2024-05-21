@@ -34,7 +34,9 @@ class MixtralBlock(nn.Module):
             use_alibi=False,
             rope_theta=rope_theta,
         ).to(dev)
-        self.norm_2 = norm_2.to(dev)
+        self.norm_2 = None
+        if norm_2 is not None:
+            self.norm_2 = norm_2.to(dev)
         self.moe = moe
         self.device = dev
 
@@ -54,9 +56,11 @@ class MixtralBlock(nn.Module):
         )
 
         h = hidden_states.to(attn_output.device) + attn_output
-        out = self.moe.forward(self.norm_2(h))
-        out = h + out
-
+        if self.norm_2 is not None: # in case of layer dropping
+            out = self.moe.forward(self.norm_2(h))
+            out = h + out
+        else: 
+            out = h
         return out, None, past_key_value
 
 
@@ -107,8 +111,14 @@ class LlamaLikeBlock(nn.Module):
             partial_rotary_factor=partial_rotary_factor,
             head_dim=head_dim,
         ).to(dev)
-        self.norm_2 = norm_2.to(dev)
-        self.mlp = mlp.to(dev)
+        if norm_2 is not None:
+            self.norm_2 = norm_2.to(dev)
+        else:
+            self.norm_2 = norm_2
+        if mlp is not None:
+            self.mlp = mlp.to(dev)
+        else:
+            self.mlp = mlp
         self.device = dev
 
     def forward(
@@ -127,7 +137,8 @@ class LlamaLikeBlock(nn.Module):
         )
 
         h = hidden_states.to(attn_output.device) + attn_output
-        out = h + self.mlp.forward(self.norm_2(h))
+        if self.norm_2 is not None:
+            out = h + self.mlp.forward(self.norm_2(h))
 
         return out, None, past_key_value
 

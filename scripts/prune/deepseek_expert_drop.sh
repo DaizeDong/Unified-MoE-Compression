@@ -79,9 +79,9 @@ seq_len=2048
 
 prune_method="expert_drop"
 expert_drop_method="global_pruning" # layerwise_pruning global_pruning
-reverse_drop="False"                # False True
-preserve_gate="False"               # False True
-r=52                                # 64 56 48 40 32 24 16 8 0
+reverse_drop="False"                   # False True
+preserve_gate="False"                  # False True
+r=48                                   # 64 60 56 48 44 40 36 32 28 24 20 16 12 8 4 0
 score_save_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/cache/DeepSeek-expert-${dataset}-${n_calibration_samples}samples.pt"
 
 model_name_or_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
@@ -153,27 +153,27 @@ srun accelerate launch \
   --prune_model_save_path ${prune_model_save_path}
 
 ##############################################################################
-output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
-
-#dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
-#dataset=alpaca-gpt4_de,c4_valid
-dataset=alpaca-gpt4_de
-
-srun accelerate launch \
-  --config_file "config/accelerate/deepseek_normal.yaml" \
-  --num_processes ${num_processes} \
-  --num_machines ${num_nodes} \
-  --main_process_ip ${head_node_ip} \
-  --main_process_port ${port} \
-  src/train_bash.py \
-  --stage pt \
-  --do_eval \
-  --model_name_or_path ${prune_model_save_path} \
-  --use_fast_tokenizer ${use_fast_tokenizer} \
-  --dataset ${dataset} \
-  --finetuning_type full \
-  --output_dir ${output_dir} \
-  --per_device_train_batch_size 4 \
-  --logging_steps 10 \
-  --plot_loss \
-  --bf16
+#output_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_pt/${folder_name}
+#
+##dataset=alpaca-gpt4_de,wiki_demo,sharegpt4,dolly_15k_de,dolly_15k_de,c4_demo
+##dataset=alpaca-gpt4_de,c4_valid
+#dataset=alpaca-gpt4_de
+#
+#srun accelerate launch \
+#  --config_file "config/accelerate/deepseek_normal.yaml" \
+#  --num_processes ${num_processes} \
+#  --num_machines ${num_nodes} \
+#  --main_process_ip ${head_node_ip} \
+#  --main_process_port ${port} \
+#  src/train_bash.py \
+#  --stage pt \
+#  --do_eval \
+#  --model_name_or_path ${prune_model_save_path} \
+#  --use_fast_tokenizer ${use_fast_tokenizer} \
+#  --dataset ${dataset} \
+#  --finetuning_type full \
+#  --output_dir ${output_dir} \
+#  --per_device_train_batch_size 4 \
+#  --logging_steps 10 \
+#  --plot_loss \
+#  --bf16

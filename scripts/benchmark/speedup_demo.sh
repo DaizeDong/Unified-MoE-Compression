@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name=speedup
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
+#SBATCH --job-name=demo
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_benchmark/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_benchmark/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1

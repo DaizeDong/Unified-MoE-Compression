@@ -219,7 +219,7 @@ class WQLinear_GEMM(nn.Module):
 
         return awq_linear
 
-    def forward(self, x):
+    def forward(self, x, routing_scores: torch.Tensor = None):
         out_shape = x.shape[:-1] + (self.out_features,)
 
         input_dtype = x.dtype

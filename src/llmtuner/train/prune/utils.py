@@ -42,7 +42,12 @@ def find_modules(module, layers=[], name='') -> dict:
 
 def find_moe_expert_linears(module, exclude_names: str = None) -> dict:
     # 🔍 find only the expert weights
-    res = find_modules(module, [ExpertLinear])
+    res = find_modules(module, [ExpertLinear, nn.Linear])
+    for key in list(res.keys()):
+        if "gate." in key:
+            res.pop(key)
+        if "self_attn." in key:
+            res.pop(key)
     if exclude_names is not None:
         exclude_names = exclude_names.split(',')
         for module_name in list(res.keys()):

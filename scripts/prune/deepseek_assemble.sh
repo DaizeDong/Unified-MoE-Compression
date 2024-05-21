@@ -235,7 +235,7 @@ output_dir="/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization
 calibration_template=default
 
 if [ $quantization_method == "GPTQ" ]; then
-  source activate awq
+  source ~/anaconda3/bin/activate awq
   cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/zeroShot
   python gptq_auto.py \
     --pretrained_model_dir ${model_name_or_path} \
@@ -249,7 +249,7 @@ if [ $quantization_method == "GPTQ" ]; then
     --trust_remote_code \
     --use_triton
 else
-  source activate awq
+  source ~/anaconda3/bin/activate awq
   cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ
   python examples/quantize.py \
     ${model_name_or_path} \

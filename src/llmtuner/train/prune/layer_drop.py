@@ -139,6 +139,8 @@ def discrete_layer_dropping(args: Namespace, model: MixtralForCausalLM, dataload
     drop_n = args.drop_n
 
     similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, args.layer_drop_norm, cache_file=args.similarity_cache_file)
+    # similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, args.layer_drop_norm, cache_file=None)
+
     sorted_similarities, sorted_layer_id = torch.sort(similarities, dim=0, descending=True)
 
     dropped_layer_list = sorted_layer_id[:drop_n].tolist()
