@@ -164,7 +164,7 @@ class DeepseekFuser:
                 module.input_layernorm.weight, module.input_layernorm.variance_epsilon
             )
             norm_2 = None
-            if module.post_attention_layernorm.weight is not None:
+            if module.post_attention_layernorm is not None:
                 norm_2 = FasterTransformerRMSNorm(
                     module.post_attention_layernorm.weight,
                     module.post_attention_layernorm.variance_epsilon,

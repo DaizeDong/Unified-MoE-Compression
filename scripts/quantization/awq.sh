@@ -69,11 +69,13 @@ model=Mistral-7B-v0.1
 model=Mixtral-8x7B-v0.1
 
 model_path=/mnt/petrelfs/share_data/quxiaoye/models/$model
+model_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_prune/Mixtral-expert_drop-global_pruning-r6
 # model_path=/mnt/petrelfs/dongdaize.d/workspace/compression/models/deepseek
 model=${model_path##*/}
+model_path=$model_path/checkpoint
 bits=4
 
-quant_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization/$model-AWQ-${bits}bits/checkpoint
+quant_path=/mnt/petrelfs/dongdaize.d/workspace/compression/results_quantization/$model-AWQ-${bits}bits-new/checkpoint
 
 source ~/anaconda3/bin/activate awq
 cd /mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ

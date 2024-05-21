@@ -1,19 +1,3 @@
-#!/usr/bin/bash
-
-#SBATCH --job-name=benchmark_speedup
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/logs_quantization/%x-%j.log
-
-#SBATCH --partition=MoE
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=0
-
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:2
-#SBATCH --quotatype=auto
-# reserved spot auto
-
 #####################################################################################################################
 source ~/anaconda3/bin/activate awq
 cd /mnt/petrelfs/dongdaize.d/workspace/compression
@@ -57,11 +41,29 @@ save_file="/mnt/petrelfs/dongdaize.d/workspace/compression/results_speedup/xxxxx
 model_type="normal"
 
 
-echo $model_path
+# echo $model_path
 
-python src/benchmark_speed.py \
-  --model_path $model_path \
-  --save_file ${save_file} \
-  # --model_type $model_type \
-  # --pretrained
+# python src/benchmark_speed.py \
+#   --model_path $model_path \
+#   --save_file ${save_file} \
+#   # --model_type $model_type \
+#   # --pretrained
 
+model_dir=/mnt/petrelfs/dongdaize.d/workspace/compression/results_assemble
+model_list=`ls $model_dir`
+
+for file in $model_list
+do 
+    model_path=$model_dir/$file/checkpoint
+    if [ -d "$model_path" ]; then
+      echo $model_path
+      sbatch /mnt/petrelfs/dongdaize.d/workspace/compression/scripts/quantization/benchmark_speed_single.sh $model_path
+      break
+      sleep 1
+    # python src/benchmark_speed.py \
+      # --model_path $model_path \
+      # --save_file ${save_file} \
+      # --model_type $model_type \
+      # --pretrained
+    fi
+done

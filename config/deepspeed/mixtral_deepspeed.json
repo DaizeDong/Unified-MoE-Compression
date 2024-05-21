@@ -24,12 +24,3 @@
   },
   "wall_clock_breakdown": false
 }
-
-  gradient_accumulation_steps: 1 # Number of training steps to accumulate gradients before averaging and applying them.
-  gradient_clipping: 1.0 # Enable gradient clipping with value.
-  offload_optimizer_device: none # [none] Disable optimizer offloading, [cpu] offload optimizer to CPU, [nvme] offload optimizer to NVMe SSD. Only applicable with ZeRO >= Stage-2.
-  offload_param_device: cpu # [none] Disable parameter offloading, [cpu] offload parameters to CPU, [nvme] offload parameters to NVMe SSD. Only applicable with ZeRO Stage-3.
-  zero3_init_flag: true # Decides whether to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with ZeRO Stage-3.
-  zero3_save_16bit_model: true # Decides whether to save 16-bit model weights when using ZeRO Stage-3.
-  zero_stage: 3 # [0] Disabled, [1] optimizer state partitioning, [2] optimizer+gradient state partitioning and [3] optimizer+gradient+parameter partitioning
-  mixed_precision: bf16 # `no` for FP32 training, `fp16` for FP16 mixed-precision training and `bf16` for BF16 mixed-precision training.

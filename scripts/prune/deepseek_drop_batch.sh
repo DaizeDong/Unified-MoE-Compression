@@ -16,7 +16,7 @@ drop_n_layer=4
 
 # hyperparameters for block drop. 
 block_drop_method="discrete"
-drop_n_block=5
+drop_n_block=4
 
 # echo $model_list
 for file in $model_list
@@ -29,11 +29,11 @@ do
     if [ -d "$model_path" ]; then
         echo $model_path
         # expert drop
-        sbatch mixtral_expert_drop_quant.sh $model_path $expert_drop_method $r
+        # sbatch mixtral_expert_drop_quant.sh $model_path $expert_drop_method $r
         # layer drop
         # sbatch mixtral_layer_drop_quant.sh $model_path $layer_drop_method $drop_n_layer
         # block drop
-        # sbatch mixtral_block_drop_quant.sh $model_path $block_drop_method $drop_n_block
+        sbatch mixtral_block_drop_quant.sh $model_path $block_drop_method $drop_n_block
         break
         sleep 1
     fi
