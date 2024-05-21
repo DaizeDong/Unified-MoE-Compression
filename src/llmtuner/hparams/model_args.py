@@ -120,6 +120,8 @@ class ModelArguments:
         default=False,
         metadata={"help": "For debugging purposes, print the status of the parameters in the model."},
     )
+
+    # 🔍
     autogptq: Optional[bool] = field(
         default=False,
         metadata={

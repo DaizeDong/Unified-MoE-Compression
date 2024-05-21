@@ -1,22 +1,17 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import torch
+
 from transformers import PreTrainedModel
-import transformers
-# import peft
-
-# print("transformers", transformers)
-# print("peft", peft)
-
 from .dpo import run_dpo
 from .ppo import run_ppo
-from .prune import run_prune,run_prune_remap_gate
+from .prune import run_prune
 from .pt import run_pt
 from .rm import run_rm
 from .sft import run_sft
 from ..extras.callbacks import LogCallback
 from ..extras.logging import get_logger
-from ..hparams import get_infer_args, get_train_args, get_train_sparse_args
+from ..hparams import get_infer_args, get_train_sparse_args
 from ..model import load_model_and_tokenizer
 
 if TYPE_CHECKING:
@@ -25,10 +20,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-
-
 def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["TrainerCallback"]] = None):
-    # model_args, data_args, training_args, finetuning_args, generating_args = get_train_args(args)
     model_args, data_args, training_args, finetuning_args, generating_args, pruning_args = get_train_sparse_args(args)
     callbacks = [LogCallback()] if callbacks is None else callbacks
 
@@ -44,8 +36,6 @@ def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["Tra
         run_dpo(model_args, data_args, training_args, finetuning_args, callbacks)
     elif finetuning_args.stage == "prune":  # 🔍
         run_prune(model_args, data_args, training_args, finetuning_args, pruning_args, callbacks)
-    elif finetuning_args.stage == "remap_gate":  # 🔍
-        run_prune_remap_gate(model_args, data_args, training_args, finetuning_args, pruning_args, callbacks)
     else:
         raise ValueError("Unknown task.")
 

@@ -1,11 +1,14 @@
-from trl import AutoModelForCausalLMWithValueHead
 from typing import TYPE_CHECKING, Optional, Tuple
 
 from transformers import AutoTokenizer
 from transformers.integrations import is_deepspeed_zero3_enabled
+from trl import AutoModelForCausalLMWithValueHead
+
 from .adapter import init_adapter
 from .deepseek.configuration_deepseek import DeepseekConfig
 from .deepseek.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+from .mixtral.configuration_mixtral import MixtralConfig
+from .mixtral.modeling_mixtral import MixtralModel, MixtralForCausalLM
 from .patcher import patch_config, patch_model, patch_tokenizer, patch_valuehead_model
 from .utils import load_valuehead_params, register_autoclass
 from ..extras.logging import get_logger
@@ -21,6 +24,10 @@ from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)
 AutoModelForCausalLM.register(DeepseekConfig, DeepseekForCausalLM)
+
+AutoConfig.register("mixtral", MixtralConfig, exist_ok=True)
+AutoModel.register(MixtralConfig, MixtralModel, exist_ok=True)
+AutoModelForCausalLM.register(MixtralConfig, MixtralForCausalLM, exist_ok=True)
 
 logger = get_logger(__name__)
 
@@ -57,12 +64,12 @@ def load_model_and_tokenizer(
     except:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
-            use_fast=not model_args.use_fast_tokenizer,
+            use_fast=not model_args.use_fast_tokenizer,  # 🔍
             split_special_tokens=model_args.split_special_tokens,
             padding_side="right",
             **config_kwargs,
         )
-        
+
     patch_tokenizer(tokenizer)
 
     config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
@@ -93,7 +100,6 @@ def load_model_and_tokenizer(
 
     if model is None:
         if model_args.autoawq:
-            # import sys
             import awq
             print(f"awq: {awq}")
             # original_path = sys.path
@@ -104,28 +110,25 @@ def load_model_and_tokenizer(
             model = AutoAWQForCausalLM.from_quantized(
                 model_args.model_name_or_path,
                 trust_remote_code=trust_remote_code,
-                # model_basename=None if autogptq is True else Path(autogptq).stem,
                 safetensors=True
                 if model_args.autoawq is True
                 else model_args.autoawq.endswith(".safetensors"),
             )
             # sys.path = original_path
-            
+
         elif model_args.autogptq:
             import sys
             sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main"] + sys.path
             from auto_gptq import AutoGPTQForCausalLM
-            
+
             model = AutoGPTQForCausalLM.from_quantized(
                 model_args.model_name_or_path,
                 trust_remote_code=False,
-                # model_basename=None if autogptq is True else Path(autogptq).stem,
                 use_safetensors=True
                 if model_args.autogptq is True
                 else model_args.autogptq.endswith(".safetensors"),
-                # **model_kwargs,
             )
-            
+
         else:
             model = AutoModelForCausalLM.from_pretrained(
                 model_args.model_name_or_path,
@@ -134,7 +137,7 @@ def load_model_and_tokenizer(
                 low_cpu_mem_usage=(not is_deepspeed_zero3_enabled()),
                 **config_kwargs,
             )
-            
+
     patch_model(model, tokenizer, model_args, is_trainable)
     register_autoclass(config, model, tokenizer)
 

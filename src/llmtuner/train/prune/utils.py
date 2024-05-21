@@ -2,7 +2,6 @@ import torch
 from torch import nn as nn, cuda
 
 from llmtuner.model.deepseek.modeling_deepseek import MoEGate
-from transformers.models.pruning_modules import ExpertLinear
 
 
 def print_gpu_memory(accelerator):
@@ -42,7 +41,7 @@ def find_modules(module, layers=[], name='') -> dict:
 
 def find_moe_expert_linears(module, exclude_names: str = None) -> dict:
     # 🔍 find only the expert weights
-    res = find_modules(module, [ExpertLinear, nn.Linear])
+    res = find_modules(module, [nn.Linear])
     for key in list(res.keys()):
         if "gate." in key:
             res.pop(key)
@@ -72,13 +71,6 @@ def find_moe_gates(module, exclude_names: str = None) -> dict:
                     res.pop(module_name)
                     break
     return res
-
-
-# def find_moe_expert_linears_and_gate(module, exclude_names: str = None) -> dict:
-#     # 🔍 find the expert weights and gate weights
-#     res_experts = find_moe_expert_linears(module, exclude_names=exclude_names)
-#     res_gates = find_moe_gates(module, exclude_names=exclude_names)
-#     return {**res_experts, **res_gates}  # merge the two dict
 
 
 @torch.no_grad()

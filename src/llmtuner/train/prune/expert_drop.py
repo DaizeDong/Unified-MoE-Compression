@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from global_utils.io import create_dir, save_json
-from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralPreTrainedModel
+from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralPreTrainedModel
 from .utils import print_gpu_memory, prepare_calibration_input, find_modules
 from .wrapper import MixtralExpertDropWrapper, DeepseekExpertDropWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel, MoEGate
@@ -31,8 +31,6 @@ def fill_missing_values_for_non_moe_layers(values: list, moe_layer_indices: list
     return filled_values
 
 
-# 🔍 The final attempt that strictly follows the pruning pipeline
-# Finally, the whole shit has been done. THANK GOD!!!!!!!!!!!!!!!!!!!!!
 @torch.no_grad()
 def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
     """
@@ -58,7 +56,12 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
-    # TODO: valid_moe_layer_support
+    # 🔍 Get valid MoE layer ids
+    if isinstance(num_experts, list):
+        valid_moe_layer_indices = [i for i in moe_layer_indices if num_experts[i] >= 0]
+    else:
+        valid_moe_layer_indices = moe_layer_indices
+    # TODO: support "valid_moe_layer" like global pruning
 
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
@@ -66,8 +69,6 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     accelerator.print('Starting ...')
     update_num_experts_list = []
     update_experts_idx = []
-    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
-    #     layer_deltas = []
 
     for i in tqdm(range(num_layers), desc="Dropping layers...", disable=not accelerator.is_main_process):
         sys.stderr.flush()
@@ -139,13 +140,6 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                         if args.score_save_file is not None:
                             routing_scores.append(scores.float().cpu())
 
-                        # if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                        #     # delta = measure_delta_top2(scores)
-                        #     ana_list = wrapped_layers[name].ana_list
-                        #     delta = np.mean(ana_list)
-                        #     accelerator.print(f"layer {i} delta: {delta}")
-                        #     layer_deltas.append(delta)
-
                 else:  # no expert left
                     update_num_experts_list.append(0)
                     update_experts_idx.append([])
@@ -167,10 +161,6 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     accelerator.print("update_num_experts_list", update_num_experts_list)
     accelerator.print("update_experts_idx", update_experts_idx)
 
-    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
-    #     layer_deltas = fill_missing_values_for_non_moe_layers(layer_deltas, moe_layer_indices, num_layers)
-    #     accelerator.print("layer_deltas", layer_deltas)
-
     # 🔍 Update the config
     accelerator.print("Expert dropping done!")
     unwrapped_model.config.use_cache = use_cache
@@ -180,8 +170,6 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         accelerator.print("Updating model config...")
         setattr(unwrapped_model.config, "num_local_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
-        # setattr(unwrapped_model.config, "layer_deltas", layer_deltas)
-        # setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
@@ -231,8 +219,6 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
 
     accelerator.print('Starting ...')
     global_scores = []
-    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
-    #     layer_deltas = []
 
     for i in tqdm(range(num_layers), desc="Gathering scores...", disable=not accelerator.is_main_process):
         sys.stderr.flush()
@@ -288,13 +274,6 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                 scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
                 global_scores.append(scores)
                 accelerator.print(f"layer {i} scores: {scores}")
-
-                # if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                #     # delta = measure_delta_top2(scores)
-                #     ana_list = wrapped_layers[name].ana_list
-                #     delta = np.mean(ana_list)
-                #     accelerator.print(f"layer {i} delta: {delta}")
-                #     layer_deltas.append(delta)
 
         else:
             for j in range(num_samples):
@@ -383,10 +362,6 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
     accelerator.print("update_num_experts_list", update_num_experts_list)
     accelerator.print("update_experts_idx", update_experts_idx)
 
-    # if isinstance(unwrapped_model, MixtralPreTrainedModel):
-    #     layer_deltas = fill_missing_values_for_non_moe_layers(layer_deltas, moe_layer_indices, num_layers)
-    #     accelerator.print("layer_deltas", layer_deltas)
-
     # 🔍 Update the config
     accelerator.print("Expert dropping done!")
     unwrapped_model.config.use_cache = use_cache
@@ -396,21 +371,9 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         accelerator.print("Updating model config...")
         setattr(unwrapped_model.config, "num_local_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
-        # setattr(unwrapped_model.config, "layer_deltas", layer_deltas)
-        # setattr(unwrapped_model.config, "mode", "dynamic")  # 🔍 ensure dynamic skipping.
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
-
-
-@torch.no_grad()
-def progressive_pruning(model, calib_loader: DataLoader, args: Namespace):
-    raise NotImplementedError
-
-
-@torch.no_grad()
-def dynamic_skipping(model, calib_loader: DataLoader, args: Namespace):
-    raise NotImplementedError
 
 
 @torch.no_grad()
@@ -438,11 +401,11 @@ def post_experts_drop(prune_model_save_path, model, tokenizer, config, accelerat
                         this_layer_num_experts = layer.block_sparse_moe.gate.out_features
                         experts_to_drop = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_preserve)))
 
-                        if not preserve_gate:  # remove weights for dropped experts
+                        if not preserve_gate:  # remove gate weights for dropped experts
                             new_gate_weight = layer.block_sparse_moe.gate.weight.data[experts_to_preserve]
                             layer.block_sparse_moe.gate = nn.Linear(in_features=layer.block_sparse_moe.gate.in_features, out_features=r, bias=False, device=layer.block_sparse_moe.gate.weight.device, dtype=layer.block_sparse_moe.gate.weight.dtype)
                             layer.block_sparse_moe.gate.weight.data = new_gate_weight
-                        else:  # re-order weights for experts, the dropped weights are preserved
+                        else:  # re-order gate weights for all experts, the dropped weights are preserved
                             new_gate_weight = layer.block_sparse_moe.gate.weight.data[experts_to_preserve + experts_to_drop]
                             layer.block_sparse_moe.gate.weight.data = new_gate_weight
 
@@ -461,10 +424,10 @@ def post_experts_drop(prune_model_save_path, model, tokenizer, config, accelerat
                         this_layer_num_experts = layer.mlp.gate.weight.data.shape[0]
                         experts_to_drop = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_preserve)))
 
-                        if not preserve_gate:  # remove weights for dropped experts
+                        if not preserve_gate:  # remove gate weights for dropped experts
                             new_gate_weight = layer.mlp.gate.weight.data[experts_to_preserve]
                             layer.mlp.gate.weight.data = new_gate_weight
-                        else:  # re-order weights for experts, the dropped weights are preserved
+                        else:  # re-order gate weights for all experts, the dropped weights are preserved
                             new_gate_weight = layer.mlp.gate.weight.data[experts_to_preserve + experts_to_drop]
                             layer.mlp.gate.weight.data = new_gate_weight
 
@@ -492,9 +455,3 @@ def post_experts_drop(prune_model_save_path, model, tokenizer, config, accelerat
 
     accelerator.wait_for_everyone()
     accelerator.print(f"model: {model}")
-
-# def measure_delta_top2(scores):
-#     sorted_scores, _ = torch.sort(scores, descending=True)
-#     delta = sorted_scores[1] / sorted_scores[0]
-#     print(f"sorted_scores:{sorted_scores}, sorted_scores[0]:{sorted_scores[0]}, sorted_scores[1]:{sorted_scores[1]}, delta:{delta}")
-#     return float(delta.data)

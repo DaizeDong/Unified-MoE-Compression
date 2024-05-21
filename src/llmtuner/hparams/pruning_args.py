@@ -1,7 +1,7 @@
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
-EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'progressive_pruning', 'dynamic_skipping', 'post_dropping')
+EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'post_dropping')
 LAYER_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
 BLOCK_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
 
@@ -17,7 +17,7 @@ class PruningArguments:
     )
     prune_method: Optional[str] = field(
         default="wanda",
-        metadata={"choices": ["wanda", "sparsegpt", "gradient-first", "gradient-zeroth", "magnitude", "remap_gate", "decompose_moe", "expert_drop", "block_drop", "layer_drop"]},
+        metadata={"choices": ["wanda", "sparsegpt", "magnitude", "expert_drop", "block_drop", "layer_drop"]},
     )
     prune_model_save_path: Optional[str] = field(
         default=None,
@@ -49,24 +49,6 @@ class PruningArguments:
     use_variant: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to use the variant for Wanda."},
-    )
-
-    # 🔍 For decomposition
-    level: Optional[str] = field(
-        default="expert",
-        metadata={"choices": ["expert", "layer", "model"]},
-    )
-    has_sparse: Optional[bool] = field(
-        default=True,
-    )
-    do_permute: Optional[bool] = field(
-        default=True,
-    )
-    use_svd: Optional[bool] = field(
-        default=True,
-    )
-    top_scores: Optional[bool] = field(
-        default=True,
     )
 
     # 🔍 For expert drop
@@ -117,12 +99,6 @@ class PruningArguments:
         default=None,
         metadata={"help": 'Cached file storing the similarity scores across layers to reduce the computation consumption. '
                           'If the file does not exist, it will be created.'},
-    )
-
-    # 🔍 For gate-remapping
-    pruned_model_path: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the pruned model. (Only for Gate-Remapping)"},
     )
 
     def to_dict(self) -> Dict[str, Any]:

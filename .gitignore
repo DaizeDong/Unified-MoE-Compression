@@ -163,16 +163,3 @@ cython_debug/
 user.config
 saves/
 cache/
-/results_pt/
-/logs_pt/
-/logs_test_prune/
-/logs_prune/
-/results_pt/
-/results_prune/
-/results_analysis/
-/results_sft/
-/logs_sft/
-/logs_quantization/
-/models/
-/results_speedup/
-/logs_benchmark/
