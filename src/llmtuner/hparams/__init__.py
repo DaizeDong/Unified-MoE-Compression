@@ -3,10 +3,8 @@ from .evaluation_args import EvaluationArguments
 from .finetuning_args import FinetuningArguments
 from .generating_args import GeneratingArguments
 from .model_args import ModelArguments
-from .pruning_args import PruningArguments
-
 from .parser import get_eval_args, get_infer_args, get_train_args, get_eval_sparse_args, get_train_sparse_args
-
+from .pruning_args import PruningArguments
 
 __all__ = [
     "DataArguments",
@@ -14,10 +12,10 @@ __all__ = [
     "FinetuningArguments",
     "GeneratingArguments",
     "ModelArguments",
-    "PruningArguments", 
+    "PruningArguments",
     "get_eval_args",
     "get_infer_args",
     "get_train_args",
+    "get_eval_sparse_args",
     "get_train_sparse_args"
-    "get_eval_sparse_args", 
 ]

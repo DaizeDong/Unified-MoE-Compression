@@ -15,14 +15,21 @@ seq_len=2048
 prune_method="block_drop"
 block_drop_method="discrete" # consecutive discrete
 drop_n=4
-similarity_cache_file="########PATH_TO_SAVE_THE_CACHE########/DeepSeek-AWQ-block-${dataset}-${n_calibration_samples}samples.pt"
 
-model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT(SHOULD_BE_THE_QUANTIZED_AWQ_MODEL)#########"
+model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT(SHOULD_BE_THE_QUANTIZED_MODEL)#########"
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 prune_model_save_path=${output_dir}/checkpoint
 use_fast_tokenizer="True"
 autoawq="True"   # True False
 autogptq="False" # True False
+
+if [ ${autoawq} = "True" ]; then
+  similarity_cache_file="########PATH_TO_SAVE_THE_CACHE########/AWQ/DeepSeek-layer-${dataset}-${n_calibration_samples}samples.pt"
+else
+  if [ ${autogptq} = "True" ]; then
+    similarity_cache_file="########PATH_TO_SAVE_THE_CACHE########/GPTQ/DeepSeek-layer-${dataset}-${n_calibration_samples}samples-NoNorm.pt"
+  fi
+fi
 
 mkdir ${prune_model_save_path}
 cp ${model_name_or_path}/quantize_config.json ${prune_model_save_path}/quantize_config.json

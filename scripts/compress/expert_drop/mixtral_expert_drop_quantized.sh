@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 num_nodes=1
-num_processes=2
+num_processes=1
 
 #dataset="lima" # lima MetaMathQA
 #prune_data_type="sft"
@@ -18,14 +18,17 @@ reverse_drop="False"                # False True
 preserve_gate="False"               # False True
 r=2                                 # 8 7 6 5 4 3 2 1 0
 
-model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########"
+model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT(SHOULD_BE_THE_QUANTIZED_MODEL)#########"
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 prune_model_save_path=${output_dir}/checkpoint
 autoawq="True"   # True False
 autogptq="False" # True False
 
+mkdir ${prune_model_save_path}
+cp ${model_name_or_path}/quantize_config.json ${prune_model_save_path}/quantize_config.json
+
 accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/mixtral_normal.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   src/train_bash.py \

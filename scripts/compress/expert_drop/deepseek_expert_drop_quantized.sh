@@ -18,12 +18,15 @@ reverse_drop="False"                # False True
 preserve_gate="False"               # False True
 r=48                                # 64 60 56 48 44 40 36 32 28 24 20 16 12 8 4 0
 
-model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########"
+model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT(SHOULD_BE_THE_QUANTIZED_MODEL)#########"
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 prune_model_save_path=${output_dir}/checkpoint
 use_fast_tokenizer="True"
 autoawq="True"   # True False
 autogptq="False" # True False
+
+mkdir ${prune_model_save_path}
+cp ${model_name_or_path}/quantize_config.json ${prune_model_save_path}/quantize_config.json
 
 accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \
