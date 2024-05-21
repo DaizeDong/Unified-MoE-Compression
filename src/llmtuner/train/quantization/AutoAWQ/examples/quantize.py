@@ -1,17 +1,13 @@
 import json
 import sys
 import os
-sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src", 
-            os.getcwd()] + sys.path
-print(f"sys.path: {sys.path}")
 
 import transformers
-print(f"transformers: {transformers}")
-
-from awq import AutoAWQForCausalLM
 from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM
-from awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
-from awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+
+from src.llmtuner.train.quantization.AutoAWQ.awq import AutoAWQForCausalLM
+from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
+from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)
@@ -21,9 +17,6 @@ model_path = sys.argv[1]
 quant_path = sys.argv[2]
 bits = sys.argv[3]
 
-# model_path = "/mnt/petrelfs/share_data/quxiaoye/models/Mistral-7B-v0.1/"
-# model_path = 'mistralai/Mistral-7B-Instruct-v0.2'
-# quant_path = '/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ/mistral-instruct-v0.2-awq'
 if "deepseek" in model_path.lower():
     q_group_size = 64
 else:

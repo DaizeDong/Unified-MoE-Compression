@@ -28,12 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
-transformers_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src"
-sys.path = [transformers_path] + sys.path
 import transformers
-
-print(transformers)
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache

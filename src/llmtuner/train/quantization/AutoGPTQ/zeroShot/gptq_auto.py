@@ -5,16 +5,12 @@ import time
 import torch
 import random
 import transformers
-
-sys.path = [os.path.abspath(os.path.dirname(os.path.dirname(__file__)))] + sys.path
-print(f"sys.path: {sys.path }")
-print(f"transformers: {transformers}")
-
 from argparse import ArgumentParser
+
 from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM, TextGenerationPipeline, GenerationConfig
-from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-from auto_gptq.modeling.deepseek_moe.configuration_deepseek import DeepseekConfig
-from auto_gptq.modeling.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+from src.llmtuner.train.quantization.AutoGPTQ.auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
+from src.llmtuner.train.quantization.AutoGPTQ.auto_gptq.modeling.deepseek_moe.configuration_deepseek import DeepseekConfig
+from src.llmtuner.train.quantization.AutoGPTQ.auto_gptq.modeling.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 
 
 from datasets import Dataset

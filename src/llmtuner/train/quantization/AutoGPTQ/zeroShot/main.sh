@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 #SBATCH --job-name=gptq
-#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/zeroShot/logs/%x-%j.log
-#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main/zeroShot/logs/%x-%j.log
+#SBATCH --output=/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoGPTQ/zeroShot/logs/%x-%j.log
+#SBATCH --error=/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoGPTQ/zeroShot/logs/%x-%j.log
 
 #SBATCH --partition=MoE
 #SBATCH --ntasks-per-node=1

@@ -2,10 +2,6 @@ import os
 import sys
 
 sys.path = [os.getcwd()] + sys.path
-transformers_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src"
-awq_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ"
-gptq_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/gptq-main"
-sys.path = [transformers_path, awq_path, gptq_path] + sys.path
 
 import time
 import torch
@@ -13,21 +9,16 @@ import argparse
 import numpy as np
 import pandas as pd
 import transformers
-import awq
-import auto_gptq
-
-from awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
-from awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
-from awq.models.base import BaseAWQForCausalLM
-from awq import AutoAWQForCausalLM
+import src.llmtuner.train.quantization.AutoAWQ.awq as awq
+import src.llmtuner.train.quantization.AutoGPTQ.auto_gptq as auto_gptq
+from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
+from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+from src.llmtuner.train.quantization.AutoAWQ.awq.models.base import BaseAWQForCausalLM
+from src.llmtuner.train.quantization.AutoAWQ.awq import AutoAWQForCausalLM
 from transformers import GenerationConfig, LogitsProcessor, LogitsProcessorList
 from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForCausalLM
-from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
+from src.llmtuner.train.quantization.AutoGPTQ.auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
 from src.global_utils.io import create_dir
-
-print(transformers)
-print(awq)
-print(auto_gptq)
 
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)

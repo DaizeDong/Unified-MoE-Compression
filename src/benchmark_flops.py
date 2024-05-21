@@ -1,23 +1,18 @@
 import os
 import sys
 
-from torch.utils.flop_counter import FlopCounterMode
+sys.path = [os.getcwd()] + sys.path
 
+from torch.utils.flop_counter import FlopCounterMode
 from global_utils.io import create_dir
 from llmtuner.model.deepseek.configuration_deepseek import DeepseekConfig
 from llmtuner.model.deepseek.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 
-sys.path = [os.getcwd()] + sys.path
-transformers_path = "/mnt/petrelfs/dongdaize.d/workspace/compression/src"
-sys.path = [transformers_path] + sys.path
-
 import torch
 import argparse
 import transformers
-
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 
-print(transformers)
 
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)

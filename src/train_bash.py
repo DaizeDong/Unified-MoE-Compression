@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path = ["/mnt/petrelfs/dongdaize.d/workspace/compression/src/llmtuner/train/quantization/AutoAWQ"] + sys.path
+
 sys.path = [os.getcwd()] + sys.path
 
 from llmtuner import run_exp
