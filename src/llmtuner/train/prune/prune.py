@@ -39,7 +39,7 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
 
         if i in moe_layer_indices:
             # Find modules
-            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to prune
+            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compress
 
             # Prune
             layer.to(device)  # 🔍
@@ -107,7 +107,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
 
         if i in moe_layer_indices:
             # Find modules
-            subset_experts = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to prune
+            subset_experts = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compress
 
             # Wrap layers
             wrapped_layers = {}
@@ -242,7 +242,7 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
 
         if i in moe_layer_indices:
             # Find modules
-            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to prune
+            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compress
 
             # Wrap layers
             wrapped_layers = {}

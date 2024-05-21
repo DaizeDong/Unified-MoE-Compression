@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 sys.path = [os.getcwd()] + sys.path
 
 import time
@@ -11,8 +12,8 @@ import pandas as pd
 import transformers
 import src.llmtuner.train.quantization.AutoAWQ.awq as awq
 import src.llmtuner.train.quantization.AutoGPTQ.auto_gptq as auto_gptq
-from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_moe.configuration_deepseek import DeepseekConfig
-from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_moe.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
+from src.llmtuner.model.deepseek.configuration_deepseek import DeepseekConfig
+from src.llmtuner.train.quantization.AutoAWQ.awq.models.deepseek_model.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 from src.llmtuner.train.quantization.AutoAWQ.awq.models.base import BaseAWQForCausalLM
 from src.llmtuner.train.quantization.AutoAWQ.awq import AutoAWQForCausalLM
 from transformers import GenerationConfig, LogitsProcessor, LogitsProcessorList

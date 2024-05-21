@@ -41,7 +41,7 @@ class CustomizedTritonAutoTuner(triton.KernelInterface):
 
             self.hook = _hook
         self.arg_names = arg_names
-        # prune configs
+        # compress configs
         if prune_configs_by:
             perf_model, top_k = (
                 prune_configs_by["perf_model"],
@@ -96,7 +96,7 @@ class CustomizedTritonAutoTuner(triton.KernelInterface):
                 key = tuple([2 ** int(math.log2(x) + 0.5) for x in key])
 
             if key not in self.cache:
-                # prune configs
+                # compress configs
                 pruned_configs = self.prune_configs(kwargs)
                 bench_start = time.time()
                 timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}

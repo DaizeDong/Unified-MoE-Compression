@@ -8,7 +8,7 @@ output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 
 dataset="c4_valid"
 
-srun accelerate launch \
+accelerate launch \
   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \

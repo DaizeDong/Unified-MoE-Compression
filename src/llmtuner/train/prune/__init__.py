@@ -1,3 +1,3 @@
-from .workflow import run_prune, run_prune_remap_gate
+from .workflow import run_prune
 
 __all__ = ["run_prune"]

@@ -3,11 +3,11 @@ import math
 
 import torch
 import torch.nn.functional as F
+import transformers
 from torch import nn as nn
 
-import transformers
 from llmtuner.model.deepseek.modeling_deepseek import MoEGate
-from llmtuner.model.mixtral.modeling_mixtral import ExpertLinear, MixtralSparseMoeBlock
+from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +37,14 @@ class WandaWrapper:
 
     def add_batch(self, input, output, routing_scores=None):
         # 🔍 rescale inputs with scores
-        if isinstance(self.layer, ExpertLinear):
-            if routing_scores is not None:
-                if self.multiply_score:
-                    # multiple routing_scores to inputs
-                    routing_scores = (routing_scores ** (self.p / 2))  # dividing 2 as the latter "scaler_row" will calculate the squared value
-                    input = input * routing_scores
-                else:
-                    # add routing_scores to memory
-                    self.add_scores(routing_scores)
+        if routing_scores is not None:
+            if self.multiply_score:
+                # multiple routing_scores to inputs
+                routing_scores = (routing_scores ** (self.p / 2))  # dividing 2 as the latter "scaler_row" will calculate the squared value
+                input = input * routing_scores
+            else:
+                # add routing_scores to memory
+                self.add_scores(routing_scores)
 
         self.add_batch_no_score(input, output)
 
@@ -61,10 +60,9 @@ class WandaWrapper:
             input = input.unsqueeze(0)  # 🔍 shape(1, tokens, hidden_size)
         tmp = input.shape[0]
 
-        if isinstance(self.layer, (nn.Linear, ExpertLinear)):
-            if len(input.shape) == 3:
-                input = input.reshape((-1, input.shape[-1]))  # shape(hidden_size, batch_size * seq_len)
-            input = input.t()  # shape(hidden_size, batch_size * seq_len)
+        if len(input.shape) == 3:
+            input = input.reshape((-1, input.shape[-1]))  # shape(hidden_size, batch_size * seq_len)
+        input = input.t()  # shape(hidden_size, batch_size * seq_len)
         input = input.type(torch.float32)
 
         if self.scaler_row is None:
