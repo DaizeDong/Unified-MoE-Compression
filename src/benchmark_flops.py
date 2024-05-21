@@ -51,7 +51,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name_or_path", type=str, default="/mnt/petrelfs/share_data/quxiaoye/models/Mixtral-8x7B-v0.1")
+    parser.add_argument("--model_name_or_path", type=str, default="./models/Mixtral-8x7B-v0.1")
     parser.add_argument("--save_file", type=str, default=None)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--seq_len", type=int, default=2048)
