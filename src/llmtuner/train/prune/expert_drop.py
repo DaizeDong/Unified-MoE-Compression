@@ -54,6 +54,9 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         num_experts = unwrapped_model.config.n_routed_experts
         num_layers = unwrapped_model.config.num_hidden_layers
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
+    else:
+        raise NotImplementedError
+
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
     # 🔍 Get valid MoE layer ids
@@ -86,6 +89,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                         subset = find_modules(layer, [MixtralSparseMoeBlock])
                     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                         subset = find_modules(layer, [MoEGate])
+                    else:
+                        raise NotImplementedError
                     # accelerator.print(subset)
 
                     # Wrap layers
@@ -206,6 +211,9 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         num_experts = unwrapped_model.config.n_routed_experts
         num_layers = unwrapped_model.config.num_hidden_layers
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
+    else:
+        raise NotImplementedError
+
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
     # 🔍 Get valid MoE layer ids

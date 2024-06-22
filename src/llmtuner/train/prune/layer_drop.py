@@ -68,7 +68,8 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                     mlp_pre_norm = layer.post_attention_layernorm
                     mlp = layer.mlp
-
+                else:
+                    raise NotImplementedError
                 if drop_norm:
                     wrapped_mlp_pre_norm = HiddenStatesRecordWrapper(mlp_pre_norm, record_input=True, record_output=False)  # 🔍 Wrap layer
                 else:
