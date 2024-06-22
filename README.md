@@ -1,5 +1,12 @@
 # Unified MoE Compression
 
+This is the official implementation of the [paper](https://arxiv.org/abs/2406.02500):  
+
+```
+Demystifying the Compression of Mixture-of-Experts Through a Unified Framework
+Shwai He*, Daize Dong*, Liang Ding, Ang Li
+```
+
 ## Installation
 
 ```bash
