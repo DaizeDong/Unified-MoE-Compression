@@ -1,17 +1,15 @@
 import inspect
 import os
+from datasets import concatenate_datasets, interleave_datasets, load_dataset, load_from_disk
 from typing import TYPE_CHECKING, List, Literal, Union
 
-from datasets import concatenate_datasets, interleave_datasets, load_dataset, load_from_disk
-
-from ..extras.constants import FILEEXT2TYPE
-from ..extras.logging import get_logger
 from .aligner import align_dataset
 from .parser import get_dataset_list
 from .preprocess import get_preprocess_and_print_func
 from .template import get_template_and_fix_tokenizer
 from .utils import checksum
-
+from ..extras.constants import FILEEXT2TYPE
+from ..extras.logging import get_logger
 
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
@@ -21,14 +19,13 @@ if TYPE_CHECKING:
     from ..hparams import DataArguments, ModelArguments
     from .parser import DatasetAttr
 
-
 logger = get_logger(__name__)
 
 
 def load_single_dataset(
-    dataset_attr: "DatasetAttr",
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
+        dataset_attr: "DatasetAttr",
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
 ):
     logger.info("Loading dataset {}...".format(dataset_attr))
     data_path, data_name, data_dir, data_files = None, None, None, None
@@ -112,9 +109,9 @@ def load_single_dataset(
 
 
 def merge_dataset(
-    all_datasets: List[Union["Dataset", "IterableDataset"]],
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
+        all_datasets: List[Union["Dataset", "IterableDataset"]],
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
 ) -> Union["Dataset", "IterableDataset"]:
     if len(all_datasets) == 1:
         return all_datasets[0]
@@ -136,12 +133,12 @@ def merge_dataset(
 
 
 def get_dataset(
-    tokenizer: "PreTrainedTokenizer",
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["pt", "sft", "rm", "ppo"],
-    # split: Optional[str] = "train", # TODO: add split
+        tokenizer: "PreTrainedTokenizer",
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        stage: Literal["pt", "sft", "rm", "ppo"],
+        # split: Optional[str] = "train", # TODO: add split
 ) -> Union["Dataset", "IterableDataset"]:
     template = get_template_and_fix_tokenizer(tokenizer, data_args.template)
     if data_args.train_on_prompt and template.efficient_eos:

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 from ..extras.constants import DATA_CONFIG
 from ..extras.misc import use_modelscope
 
-
 if TYPE_CHECKING:
     from ..hparams import DataArguments
 

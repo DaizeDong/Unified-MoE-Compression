@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Optional, Tuple
 
+from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 from transformers import AutoTokenizer
 from transformers.integrations import is_deepspeed_zero3_enabled
 from trl import AutoModelForCausalLMWithValueHead
@@ -17,9 +18,6 @@ from ..extras.misc import count_parameters, get_current_device, try_download_mod
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
     from ..hparams import FinetuningArguments, ModelArguments
-
-# 🔍🔍🔍
-from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)
@@ -100,8 +98,7 @@ def load_model_and_tokenizer(
 
     if model is None:
         if model_args.autoawq:
-            import src.llmtuner.train.quantization.AutoAWQ.awq as awq
-            from src.llmtuner.train.quantization.AutoAWQ.awq import AutoAWQForCausalLM
+            from awq import AutoAWQForCausalLM
             trust_remote_code = True
 
             model = AutoAWQForCausalLM.from_quantized(
@@ -113,7 +110,7 @@ def load_model_and_tokenizer(
             )
 
         elif model_args.autogptq:
-            from src.llmtuner.train.quantization.AutoGPTQ.auto_gptq import AutoGPTQForCausalLM
+            from auto_gptq import AutoGPTQForCausalLM
 
             model = AutoGPTQForCausalLM.from_quantized(
                 model_args.model_name_or_path,

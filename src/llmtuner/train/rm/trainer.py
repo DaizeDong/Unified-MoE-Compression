@@ -1,17 +1,14 @@
 import json
 import os
+import torch
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
-import torch
 from transformers import Trainer
-
 from ...extras.logging import get_logger
-
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
     from transformers.trainer import PredictionOutput
-
 
 logger = get_logger(__name__)
 
@@ -26,7 +23,7 @@ class PairwiseTrainer(Trainer):
         self.can_return_loss = True  # override property to return eval_loss
 
     def compute_loss(
-        self, model: "PreTrainedModel", inputs: Dict[str, torch.Tensor], return_outputs: Optional[bool] = False
+            self, model: "PreTrainedModel", inputs: Dict[str, torch.Tensor], return_outputs: Optional[bool] = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]]]:
         r"""
         Computes pairwise loss. The first n examples are chosen and the last n examples are rejected.

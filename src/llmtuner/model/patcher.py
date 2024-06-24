@@ -19,13 +19,10 @@ from ..extras.packages import is_flash_attn2_available
 from ..extras.patches.llama_patch import apply_llama_patch
 from ..extras.patches.mixtral_patch import patch_mixtral_replace_moe_impl
 
-
 if TYPE_CHECKING:
     from transformers import PretrainedConfig, PreTrainedTokenizer
     from trl import AutoModelForCausalLMWithValueHead
-
     from ..hparams import ModelArguments
-
 
 logger = get_logger(__name__)
 SUPPORTED_CLASS_FOR_S2ATTN = ["llama"]
@@ -96,7 +93,7 @@ def _get_quantization_dataset(tokenizer: "PreTrainedTokenizer", model_args: "Mod
                 break  # TODO: fix large maxlen
 
         word_idx = random.randint(0, sample["input_ids"].size(1) - maxlen - 1)
-        input_ids = sample["input_ids"][:, word_idx : word_idx + maxlen]
+        input_ids = sample["input_ids"][:, word_idx: word_idx + maxlen]
         samples.append(tokenizer.decode(input_ids[0].tolist(), skip_special_tokens=True))
 
     return samples
@@ -151,10 +148,10 @@ def _configure_longlora(config: "PretrainedConfig") -> None:
 
 
 def _configure_quantization(
-    config: "PretrainedConfig",
-    tokenizer: "PreTrainedTokenizer",
-    model_args: "ModelArguments",
-    config_kwargs: Dict[str, Any],
+        config: "PretrainedConfig",
+        tokenizer: "PreTrainedTokenizer",
+        model_args: "ModelArguments",
+        config_kwargs: Dict[str, Any],
 ) -> None:
     r"""
     Priority: GPTQ-quantized (training) > AutoGPTQ (export) > Bitsandbytes (training)
@@ -208,7 +205,7 @@ def _configure_quantization(
 
 
 def _prepare_model_for_training(
-    model: "PreTrainedModel", model_args: "ModelArguments", output_layer_name: Optional[str] = "lm_head"
+        model: "PreTrainedModel", model_args: "ModelArguments", output_layer_name: Optional[str] = "lm_head"
 ) -> None:
     r"""
     Includes:
@@ -250,11 +247,11 @@ def patch_tokenizer(tokenizer: "PreTrainedTokenizer") -> None:
 
 
 def patch_config(
-    config: "PretrainedConfig",
-    tokenizer: "PreTrainedTokenizer",
-    model_args: "ModelArguments",
-    config_kwargs: Dict[str, Any],
-    is_trainable: bool,
+        config: "PretrainedConfig",
+        tokenizer: "PreTrainedTokenizer",
+        model_args: "ModelArguments",
+        config_kwargs: Dict[str, Any],
+        is_trainable: bool,
 ) -> None:
     if model_args.compute_dtype is None:  # priority: bf16 > fp16 > fp32
         model_args.compute_dtype = infer_optim_dtype(model_dtype=getattr(config, "torch_dtype", None))
@@ -275,7 +272,7 @@ def patch_config(
 
 
 def patch_model(
-    model: "PreTrainedModel", tokenizer: "PreTrainedTokenizer", model_args: "ModelArguments", is_trainable: bool
+        model: "PreTrainedModel", tokenizer: "PreTrainedTokenizer", model_args: "ModelArguments", is_trainable: bool
 ) -> None:
     if "GenerationMixin" not in str(model.generate.__func__):
         model.generate = MethodType(PreTrainedModel.generate, model)

@@ -1,11 +1,9 @@
-from typing import TYPE_CHECKING, Optional, Union
-
 import torch
+from typing import TYPE_CHECKING, Optional, Union
 
 from ..extras.logging import get_logger
 from ..hparams import FinetuningArguments, ModelArguments
 from ..model import load_model_and_tokenizer, load_valuehead_params
-
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, Trainer
@@ -14,16 +12,15 @@ if TYPE_CHECKING:
 
     from ..hparams import DataArguments
 
-
 logger = get_logger(__name__)
 
 
 def create_modelcard_and_push(
-    trainer: "Trainer",
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    finetuning_args: "FinetuningArguments",
+        trainer: "Trainer",
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        finetuning_args: "FinetuningArguments",
 ) -> None:
     kwargs = {
         "tasks": "text-generation",
@@ -40,7 +37,7 @@ def create_modelcard_and_push(
 
 
 def create_ref_model(
-    model_args: "ModelArguments", finetuning_args: "FinetuningArguments", add_valuehead: Optional[bool] = False
+        model_args: "ModelArguments", finetuning_args: "FinetuningArguments", add_valuehead: Optional[bool] = False
 ) -> Union["PreTrainedModel", "AutoModelForCausalLMWithValueHead"]:
     r"""
     Creates reference model for PPO/DPO training. Evaluation mode is not supported.
@@ -75,7 +72,7 @@ def create_ref_model(
 
 
 def create_reward_model(
-    model: "AutoModelForCausalLMWithValueHead", model_args: "ModelArguments", finetuning_args: "FinetuningArguments"
+        model: "AutoModelForCausalLMWithValueHead", model_args: "ModelArguments", finetuning_args: "FinetuningArguments"
 ) -> "AutoModelForCausalLMWithValueHead":
     r"""
     Creates reward model for PPO training.

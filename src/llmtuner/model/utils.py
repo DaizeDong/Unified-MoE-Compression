@@ -9,12 +9,9 @@ from ..extras.constants import V_HEAD_SAFE_WEIGHTS_NAME, V_HEAD_WEIGHTS_NAME
 from ..extras.logging import get_logger
 from ..extras.misc import get_current_device
 
-
 if TYPE_CHECKING:
     from transformers import PretrainedConfig, PreTrainedTokenizer
-
     from ..hparams import ModelArguments
-
 
 logger = get_logger(__name__)
 
@@ -28,10 +25,10 @@ def dispatch_model(model: "PreTrainedModel") -> "PreTrainedModel":
         return model
 
     if (
-        torch.cuda.device_count() > 1
-        and isinstance(model, PreTrainedModel)
-        and model._no_split_modules is not None
-        and model.config.model_type != "chatglm"
+            torch.cuda.device_count() > 1
+            and isinstance(model, PreTrainedModel)
+            and model._no_split_modules is not None
+            and model.config.model_type != "chatglm"
     ):
         from accelerate import dispatch_model
         from accelerate.utils import get_balanced_memory, infer_auto_device_map
@@ -95,7 +92,7 @@ def find_expanded_modules(model: "PreTrainedModel", target_modules: List[str], n
     module_names = []
     for name, _ in model.named_modules():
         if any(target_module in name for target_module in target_modules) and any(
-            trainable_layer in name for trainable_layer in trainable_layers
+                trainable_layer in name for trainable_layer in trainable_layers
         ):
             module_names.append(name)
 

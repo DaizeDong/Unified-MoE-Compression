@@ -1,20 +1,12 @@
 import torch
 from torch import nn as nn, cuda
 
-from llmtuner.model.deepseek.modeling_deepseek import MoEGate
-
 
 def print_gpu_memory(accelerator):
     if accelerator.is_local_main_process:  # 🔍
         for i in range(cuda.device_count()):
             used_memory = cuda.memory_allocated(0) // 1024 ** 2
             print(f"GPU {i} Used Memory: {used_memory}MB")
-
-
-def print_gpu_memory_device():
-    device = cuda.current_device()
-    used_memory = cuda.memory_allocated(device) // 1024 ** 2
-    print(f"GPU {device} Used Memory: {used_memory}MB")
 
 
 def find_modules(module, layers=[], name='') -> dict:
@@ -46,22 +38,6 @@ def find_moe_expert_linears(module, exclude_names: str = None) -> dict:
         if "gate." in key:
             res.pop(key)
         if "self_attn." in key:
-            res.pop(key)
-    if exclude_names is not None:
-        exclude_names = exclude_names.split(',')
-        for module_name in list(res.keys()):
-            for exclude_name in exclude_names:
-                if exclude_name in module_name:
-                    res.pop(module_name)
-                    break
-    return res
-
-
-def find_moe_gates(module, exclude_names: str = None) -> dict:
-    # 🔍 find only the gate network
-    res = find_modules(module, [nn.Linear, MoEGate])  # MoEGate for DeepSeek
-    for key in list(res.keys()):
-        if ".gate." not in key:
             res.pop(key)
     if exclude_names is not None:
         exclude_names = exclude_names.split(',')
@@ -165,7 +141,7 @@ def prepare_calibration_input(model, dataloader, num_samples=16):
             break
         try:
             model(**batch)
-        except ValueError:
+        except:
             pass
     layers[0] = layers[0].module
 

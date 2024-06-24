@@ -2,21 +2,20 @@ import logging
 import math
 import os
 import sys
-from argparse import Namespace
-from copy import deepcopy
-
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
+from argparse import Namespace
+from copy import deepcopy
 from torch import no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from global_utils.io import create_dir
 from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
-from llmtuner.train.prune.utils import prepare_calibration_input, print_gpu_memory
-from llmtuner.train.prune.wrapper import HiddenStatesRecordWrapper
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
+from llmtuner.train.prune.utils import prepare_calibration_input, print_gpu_memory
+from llmtuner.train.prune.io import create_dir
+from llmtuner.train.prune.wrapper import HiddenStatesRecordWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +44,8 @@ def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
             num_layers = unwrapped_model.config.num_hidden_layers
         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
             num_layers = unwrapped_model.config.num_hidden_layers
+        else:
+            raise NotImplementedError
 
         # 🔍 Initialize the similarities.
         # Row: each layer
@@ -84,6 +85,7 @@ def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
             inputs, outputs = outputs, inputs
             print_gpu_memory(accelerator)
 
+        # 🔍 Automatically choose the dtype to prevent OOM
         dtype = torch.float32 if num_samples <= 64 else torch.bfloat16
 
         all_hidden_states = []
@@ -117,6 +119,25 @@ def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
     return similarities
 
 
+def discrete_block_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
+    """
+    🔍 Prune blocks in a discrete order.
+    E.g., [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] -> [0, 2, 6, 8, 9]
+    """
+    drop_n = args.drop_n
+
+    similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
+    # similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=None)
+
+    similarities_drop_1 = similarities[:, 0].view(-1)
+    sorted_similarities, sorted_layer_id = torch.sort(similarities_drop_1, dim=0, descending=True)
+    accelerator.print(f"similarities_drop_1: {similarities_drop_1}")
+
+    dropped_layer_list = sorted_layer_id[:drop_n].tolist()
+    accelerator.print(f"Dropped layer: {dropped_layer_list}, similarities: {sorted_similarities[:drop_n].tolist()}")
+    return dropped_layer_list
+
+
 def consecutive_block_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
     """
     🔍 Prune blocks in a consecutive order.
@@ -137,26 +158,7 @@ def consecutive_block_dropping(args: Namespace, model: MixtralForCausalLM, datal
     return dropped_layer_list
 
 
-def discrete_block_dropping(args: Namespace, model: MixtralForCausalLM, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
-    """
-    🔍 Prune blocks in a discrete order.
-    E.g., [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] -> [0, 2, 6, 8, 9]
-    """
-    drop_n = args.drop_n
-
-    similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=args.similarity_cache_file)
-    # similarities = get_block_similarities(model, dataloader, accelerator, num_samples, cache_file=None)
-
-    similarities_drop_1 = similarities[:, 0].view(-1)
-    sorted_similarities, sorted_layer_id = torch.sort(similarities_drop_1, dim=0, descending=True)
-    accelerator.print(f"similarities_drop_1: {similarities_drop_1}")
-
-    dropped_layer_list = sorted_layer_id[:drop_n].tolist()
-    accelerator.print(f"Dropped layer: {dropped_layer_list}, similarities: {sorted_similarities[:drop_n].tolist()}")
-    return dropped_layer_list
-
-
-def post_block_drop(prune_model_save_path, model, tokenizer, layer_id_mapping, accelerator):
+def post_block_drop(compressed_model_save_path, model, tokenizer, layer_id_mapping, accelerator):
     # get state dict
     state_dict = model.state_dict()
     accelerator.print(f"layer_id_mapping: {layer_id_mapping}")
@@ -212,9 +214,9 @@ def post_block_drop(prune_model_save_path, model, tokenizer, layer_id_mapping, a
 
         # Save
         accelerator.print("Saving...")
-        new_model.save_pretrained(prune_model_save_path)
-        tokenizer.save_pretrained(prune_model_save_path)
-        new_config.save_pretrained(prune_model_save_path)
+        new_model.save_pretrained(compressed_model_save_path)
+        tokenizer.save_pretrained(compressed_model_save_path)
+        new_config.save_pretrained(compressed_model_save_path)
 
     accelerator.wait_for_everyone()
-    accelerator.print(f"Model saved to {prune_model_save_path}")
+    accelerator.print(f"Model saved to {compressed_model_save_path}")

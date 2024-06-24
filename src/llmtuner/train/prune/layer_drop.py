@@ -2,18 +2,17 @@ import logging
 import math
 import os
 import sys
-from argparse import Namespace
-
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
+from argparse import Namespace
 from torch import no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from global_utils.io import create_dir
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
 from .utils import print_gpu_memory, prepare_calibration_input
+from .io import create_dir
 from .wrapper import HiddenStatesRecordWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 
@@ -46,6 +45,9 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
             num_layers = unwrapped_model.config.num_hidden_layers
             moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
+        else:
+            raise NotImplementedError
+
         accelerator.print("moe_layer_indices", moe_layer_indices)
 
         # 🔍 Initialize the similarities.
@@ -70,6 +72,7 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                     mlp = layer.mlp
                 else:
                     raise NotImplementedError
+
                 if drop_norm:
                     wrapped_mlp_pre_norm = HiddenStatesRecordWrapper(mlp_pre_norm, record_input=True, record_output=False)  # 🔍 Wrap layer
                 else:
@@ -148,7 +151,7 @@ def discrete_layer_dropping(args: Namespace, model: MixtralForCausalLM, dataload
     return dropped_layer_list
 
 
-def post_layers_drop(prune_model_save_path, model, tokenizer, reserved_layer_list, accelerator: Accelerator):
+def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_layer_list, accelerator: Accelerator):
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     layers = unwrapped_model.model.layers
 
@@ -161,6 +164,8 @@ def post_layers_drop(prune_model_save_path, model, tokenizer, reserved_layer_lis
                     num_experts.append(unwrapped_model.config.num_local_experts[layer_id] if isinstance(unwrapped_model.config.num_local_experts, list) else unwrapped_model.config.num_local_experts)
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                     num_experts.append(unwrapped_model.config.n_routed_experts[layer_id] if isinstance(unwrapped_model.config.n_routed_experts, list) else unwrapped_model.config.n_routed_experts)
+                else:
+                    raise NotImplementedError
             else:
                 if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
                     layer.post_attention_layernorm = None
@@ -168,16 +173,20 @@ def post_layers_drop(prune_model_save_path, model, tokenizer, reserved_layer_lis
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                     layer.post_attention_layernorm = None
                     layer.mlp = None
+                else:
+                    raise NotImplementedError
                 num_experts.append(-1)  # 🔍 append -1 to mark that the layer has no MoE and Norm
 
         if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
             unwrapped_model.config.num_local_experts = num_experts
         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
             unwrapped_model.config.n_routed_experts = num_experts
+        else:
+            raise NotImplementedError
 
         accelerator.print("Saving...")
-        unwrapped_model.save_pretrained(prune_model_save_path)
-        tokenizer.save_pretrained(prune_model_save_path)
+        unwrapped_model.save_pretrained(compressed_model_save_path)
+        tokenizer.save_pretrained(compressed_model_save_path)
 
     accelerator.wait_for_everyone()
     accelerator.print(f"model: {model}")

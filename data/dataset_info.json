@@ -22,7 +22,7 @@
     }
   },
   "MetaMathQA": {
-    "file_name": "MetaMathQA_part.json", 
+    "file_name": "MetaMathQA_part.json",
     "columns": {
       "prompt": "query",
       "response": "response"

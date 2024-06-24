@@ -1,16 +1,14 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, Union
 
-from ..extras.logging import get_logger
 from .formatter import EmptyFormatter, FunctionFormatter, StringFormatter, ToolFormatter
 from .utils import Role, infer_max_len
-
+from ..extras.logging import get_logger
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer
 
     from .formatter import Formatter
-
 
 logger = get_logger(__name__)
 
@@ -31,13 +29,13 @@ class Template:
     force_system: bool
 
     def encode_oneturn(
-        self,
-        tokenizer: "PreTrainedTokenizer",
-        messages: List[Dict[str, str]],
-        system: Optional[str] = None,
-        tools: Optional[str] = None,
-        cutoff_len: Optional[int] = 1_000_000,
-        reserved_label_len: Optional[int] = 1,
+            self,
+            tokenizer: "PreTrainedTokenizer",
+            messages: List[Dict[str, str]],
+            system: Optional[str] = None,
+            tools: Optional[str] = None,
+            cutoff_len: Optional[int] = 1_000_000,
+            reserved_label_len: Optional[int] = 1,
     ) -> Tuple[List[int], List[int]]:
         r"""
         Returns a single pair of token ids representing prompt and response respectively.
@@ -51,13 +49,13 @@ class Template:
         return prompt_ids, answer_ids
 
     def encode_multiturn(
-        self,
-        tokenizer: "PreTrainedTokenizer",
-        messages: List[Dict[str, str]],
-        system: Optional[str] = None,
-        tools: Optional[str] = None,
-        cutoff_len: Optional[int] = 1_000_000,
-        reserved_label_len: Optional[int] = 1,
+            self,
+            tokenizer: "PreTrainedTokenizer",
+            messages: List[Dict[str, str]],
+            system: Optional[str] = None,
+            tools: Optional[str] = None,
+            cutoff_len: Optional[int] = 1_000_000,
+            reserved_label_len: Optional[int] = 1,
     ) -> Sequence[Tuple[List[int], List[int]]]:
         r"""
         Returns multiple pairs of token ids representing prompts and responses respectively.
@@ -65,13 +63,13 @@ class Template:
         return self._encode(tokenizer, messages, system, tools, cutoff_len, reserved_label_len)
 
     def _encode(
-        self,
-        tokenizer: "PreTrainedTokenizer",
-        messages: List[Dict[str, str]],
-        system: str,
-        tools: str,
-        cutoff_len: int,
-        reserved_label_len: int,
+            self,
+            tokenizer: "PreTrainedTokenizer",
+            messages: List[Dict[str, str]],
+            system: str,
+            tools: str,
+            cutoff_len: int,
+            reserved_label_len: int,
     ) -> Sequence[Tuple[List[int], List[int]]]:
         r"""
         Encodes formatted inputs to pairs of token ids.
@@ -104,7 +102,7 @@ class Template:
         return self._make_pairs(encoded_messages, cutoff_len, reserved_label_len)
 
     def _convert_elements_to_ids(
-        self, tokenizer: "PreTrainedTokenizer", elements: List[Union[str, Dict[str, str]]]
+            self, tokenizer: "PreTrainedTokenizer", elements: List[Union[str, Dict[str, str]]]
     ) -> List[int]:
         r"""
         Converts elements to token ids.
@@ -127,10 +125,10 @@ class Template:
         return token_ids
 
     def _make_pairs(
-        self,
-        encoded_messages: Sequence[List[int]],
-        cutoff_len: int,
-        reserved_label_len: int,
+            self,
+            encoded_messages: Sequence[List[int]],
+            cutoff_len: int,
+            reserved_label_len: int,
     ) -> Sequence[Tuple[List[int], List[int]]]:
         encoded_pairs = []
         total_length = 0
@@ -155,13 +153,13 @@ class Template:
 @dataclass
 class Llama2Template(Template):
     def _encode(
-        self,
-        tokenizer: "PreTrainedTokenizer",
-        messages: List[Dict[str, str]],
-        system: str,
-        tools: str,
-        cutoff_len: int,
-        reserved_label_len: int,
+            self,
+            tokenizer: "PreTrainedTokenizer",
+            messages: List[Dict[str, str]],
+            system: str,
+            tools: str,
+            cutoff_len: int,
+            reserved_label_len: int,
     ) -> Sequence[Tuple[List[int], List[int]]]:
         r"""
         Encodes formatted inputs to pairs of token ids.
@@ -199,19 +197,19 @@ templates: Dict[str, Template] = {}
 
 
 def _register_template(
-    name: str,
-    format_user: Optional["Formatter"] = None,
-    format_assistant: Optional["Formatter"] = None,
-    format_system: Optional["Formatter"] = None,
-    format_function: Optional["Formatter"] = None,
-    format_observation: Optional["Formatter"] = None,
-    format_tools: Optional["Formatter"] = None,
-    format_separator: Optional["Formatter"] = None,
-    default_system: Optional[str] = "",
-    stop_words: Optional[List[str]] = [],
-    efficient_eos: Optional[bool] = False,
-    replace_eos: Optional[bool] = False,
-    force_system: Optional[bool] = False,
+        name: str,
+        format_user: Optional["Formatter"] = None,
+        format_assistant: Optional["Formatter"] = None,
+        format_system: Optional["Formatter"] = None,
+        format_function: Optional["Formatter"] = None,
+        format_observation: Optional["Formatter"] = None,
+        format_tools: Optional["Formatter"] = None,
+        format_separator: Optional["Formatter"] = None,
+        default_system: Optional[str] = "",
+        stop_words: Optional[List[str]] = [],
+        efficient_eos: Optional[bool] = False,
+        replace_eos: Optional[bool] = False,
+        force_system: Optional[bool] = False,
 ) -> None:
     eos_slots = [] if efficient_eos else [{"eos_token"}]
     template_class = Llama2Template if name.startswith("llama2") else Template
@@ -251,8 +249,8 @@ def _add_or_replace_eos_token(tokenizer: "PreTrainedTokenizer", eos_token: str) 
 
 
 def get_template_and_fix_tokenizer(
-    tokenizer: "PreTrainedTokenizer",
-    name: Optional[str] = None,
+        tokenizer: "PreTrainedTokenizer",
+        name: Optional[str] = None,
 ) -> Template:
     if name is None:
         template = templates["vanilla"]  # placeholder
@@ -294,7 +292,6 @@ _register_template(
     ),
 )
 
-
 _register_template(
     name="aquila",
     format_user=StringFormatter(slots=["Human: {{content}}###Assistant:"]),
@@ -307,20 +304,17 @@ _register_template(
     efficient_eos=True,
 )
 
-
 _register_template(
     name="baichuan",
     format_user=StringFormatter(slots=[{"token": "<reserved_102>"}, "{{content}}", {"token": "<reserved_103>"}]),
     efficient_eos=True,
 )
 
-
 _register_template(
     name="baichuan2",
     format_user=StringFormatter(slots=[{"token": "<reserved_106>"}, "{{content}}", {"token": "<reserved_107>"}]),
     efficient_eos=True,
 )
-
 
 _register_template(
     name="belle",
@@ -330,12 +324,10 @@ _register_template(
     force_system=True,
 )
 
-
 _register_template(
     name="bluelm",
     format_user=StringFormatter(slots=[{"token": "[|Human|]:"}, "{{content}}", {"token": "[|AI|]:"}]),
 )
-
 
 _register_template(
     name="chatglm2",
@@ -345,7 +337,6 @@ _register_template(
     efficient_eos=True,
     force_system=True,
 )
-
 
 _register_template(
     name="chatglm3",
@@ -366,7 +357,6 @@ _register_template(
     efficient_eos=True,
 )
 
-
 _register_template(
     name="chatml",
     format_user=StringFormatter(slots=["<|im_start|>user\n{{content}}<|im_end|>\n<|im_start|>assistant\n"]),
@@ -375,7 +365,6 @@ _register_template(
     stop_words=["<|im_end|>", "<|im_start|>"],
     replace_eos=True,
 )
-
 
 _register_template(
     name="chatml_de",
@@ -387,13 +376,11 @@ _register_template(
     replace_eos=True,
 )
 
-
 _register_template(
     name="codegeex2",
     format_system=StringFormatter(slots=[{"token": "[gMASK]"}, {"token": "sop"}, "{{content}}"]),
     force_system=True,
 )
-
 
 _register_template(
     name="cpm",
@@ -402,14 +389,12 @@ _register_template(
     force_system=True,
 )
 
-
 _register_template(
     name="deepseek",
     format_user=StringFormatter(slots=["User: {{content}}\n\nAssistant:"]),
     format_system=StringFormatter(slots=[{"bos_token"}, "{{content}}"]),
     force_system=True,
 )
-
 
 _register_template(
     name="deepseekcoder",
@@ -426,7 +411,6 @@ _register_template(
     efficient_eos=True,
 )
 
-
 _register_template(
     name="default",
     format_user=StringFormatter(slots=["Human: {{content}}\nAssistant: "]),
@@ -434,14 +418,12 @@ _register_template(
     format_separator=EmptyFormatter(slots=["\n"]),
 )
 
-
 _register_template(
     name="falcon",
     format_user=StringFormatter(slots=["User: {{content}}\nFalcon:"]),
     format_separator=EmptyFormatter(slots=["\n"]),
     efficient_eos=True,
 )
-
 
 _register_template(
     name="gemma",
@@ -452,7 +434,6 @@ _register_template(
     force_system=True,
 )
 
-
 _register_template(
     name="intern",
     format_user=StringFormatter(slots=["<|User|>:{{content}}", {"token": "<eoh>"}, "\n<|Bot|>:"]),
@@ -460,7 +441,6 @@ _register_template(
     stop_words=["<eoa>"],
     efficient_eos=True,
 )
-
 
 _register_template(
     name="intern2",
@@ -478,7 +458,6 @@ _register_template(
     efficient_eos=True,  # internlm2 tokenizer cannot set eos_token_id
 )
 
-
 _register_template(
     name="llama2",
     format_user=StringFormatter(slots=[{"bos_token"}, "[INST] {{content}} [/INST]"]),
@@ -495,7 +474,6 @@ _register_template(
     ),
 )
 
-
 _register_template(
     name="llama2_zh",
     format_user=StringFormatter(slots=[{"bos_token"}, "[INST] {{content}} [/INST]"]),
@@ -503,14 +481,12 @@ _register_template(
     default_system="You are a helpful assistant. 你是一个乐于助人的助手。",
 )
 
-
 _register_template(
     name="mistral",
     format_user=StringFormatter(slots=["[INST] {{content}} [/INST]"]),
     format_system=StringFormatter(slots=[{"bos_token"}, "{{content}}"]),
     force_system=True,
 )
-
 
 _register_template(
     name="openchat",
@@ -520,14 +496,12 @@ _register_template(
     force_system=True,
 )
 
-
 _register_template(
     name="orion",
     format_user=StringFormatter(slots=["Human: {{content}}\n\nAssistant: ", {"eos_token"}]),
     format_system=StringFormatter(slots=[{"bos_token"}, "{{content}}"]),
     force_system=True,
 )
-
 
 _register_template(
     name="qwen",
@@ -539,14 +513,12 @@ _register_template(
     replace_eos=True,
 )
 
-
 _register_template(
     name="solar",
     format_user=StringFormatter(slots=["### User:\n{{content}}\n\n### Assistant:\n"]),
     format_system=StringFormatter(slots=["### System:\n{{content}}\n\n"]),
     efficient_eos=True,
 )
-
 
 _register_template(
     name="starchat",
@@ -560,11 +532,9 @@ _register_template(
     force_system=True,
 )
 
-
 _register_template(
     name="vanilla",
 )
-
 
 _register_template(
     name="vicuna",
@@ -574,7 +544,6 @@ _register_template(
         "The assistant gives helpful, detailed, and polite answers to the user's questions."
     ),
 )
-
 
 _register_template(
     name="xuanyuan",
@@ -586,12 +555,10 @@ _register_template(
     ),
 )
 
-
 _register_template(
     name="xverse",
     format_user=StringFormatter(slots=["Human: {{content}}\n\nAssistant: "]),
 )
-
 
 _register_template(
     name="yayi",
@@ -612,7 +579,6 @@ _register_template(
     stop_words=["<|End|>"],
 )
 
-
 _register_template(
     name="yi",
     format_user=StringFormatter(slots=["<|im_start|>user\n{{content}}<|im_end|>\n<|im_start|>assistant\n"]),
@@ -620,7 +586,6 @@ _register_template(
     stop_words=["<|im_end|>"],
     replace_eos=True,
 )
-
 
 _register_template(
     name="yuan",
@@ -630,14 +595,12 @@ _register_template(
     replace_eos=True,
 )
 
-
 _register_template(
     name="zephyr",
     format_user=StringFormatter(slots=["<|user|>\n{{content}}", {"eos_token"}, "<|assistant|>"]),
     format_system=StringFormatter(slots=["<|system|>\n{{content}}", {"eos_token"}]),
     default_system="You are a friendly chatbot who always responds in the style of a pirate",
 )
-
 
 _register_template(
     name="ziya",

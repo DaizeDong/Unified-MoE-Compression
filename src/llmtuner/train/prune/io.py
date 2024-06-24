@@ -1,12 +1,11 @@
+import json
 import os
-
 from accelerate import Accelerator
 
-from global_utils.io import save_json
 from .utils import check_sparsity_from_state_dict
 
 
-def save_sparse_model(prune_model_save_path, model, tokenizer, accelerator: Accelerator, update_state_dict, check_sparsity=True):
+def save_sparse_model(compressed_model_save_path, model, tokenizer, accelerator: Accelerator, update_state_dict, check_sparsity=True):
     # 🔍 check sparsity
     if check_sparsity and accelerator.is_main_process:
         accelerator.print("*" * 30)
@@ -19,8 +18,8 @@ def save_sparse_model(prune_model_save_path, model, tokenizer, accelerator: Acce
     # 🔍 save
     accelerator.print("Saving models... (may take minutes)")
     if accelerator.is_main_process:
-        if not os.path.exists(prune_model_save_path):
-            os.makedirs(prune_model_save_path)
+        if not os.path.exists(compressed_model_save_path):
+            os.makedirs(compressed_model_save_path)
     accelerator.wait_for_everyone()
 
     # get state dict for saving
@@ -49,31 +48,31 @@ def save_sparse_model(prune_model_save_path, model, tokenizer, accelerator: Acce
         # save updated state dict
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(
-            prune_model_save_path,
+            compressed_model_save_path,
             is_main_process=accelerator.is_main_process,
             save_function=accelerator.save,
             state_dict=save_state_dict,
         )
-        tokenizer.save_pretrained(prune_model_save_path)
+        tokenizer.save_pretrained(compressed_model_save_path)
 
     accelerator.wait_for_everyone()
-    accelerator.print(f"Model saved to {prune_model_save_path}")
+    accelerator.print(f"Model saved to {compressed_model_save_path}")
 
 
-def save_expert_dropped_config(prune_model_save_path, model, tokenizer, accelerator: Accelerator):
+def save_expert_dropped_config(compressed_model_save_path, model, tokenizer, accelerator: Accelerator):
     if accelerator.is_main_process:
-        if not os.path.exists(prune_model_save_path):
-            os.makedirs(prune_model_save_path)
+        if not os.path.exists(compressed_model_save_path):
+            os.makedirs(compressed_model_save_path)
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.config.save_pretrained(prune_model_save_path)
+        unwrapped_model.config.save_pretrained(compressed_model_save_path)
     accelerator.wait_for_everyone()
 
 
-def save_layer_dropped_config(prune_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
+def save_layer_dropped_config(compressed_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
     # 🔍 save
     if accelerator.is_main_process:
-        if not os.path.exists(prune_model_save_path):
-            os.makedirs(prune_model_save_path)
+        if not os.path.exists(compressed_model_save_path):
+            os.makedirs(compressed_model_save_path)
 
         # 🔍 get reserved MLP layer ids
         unwrapped_model = accelerator.unwrap_model(model)
@@ -81,17 +80,17 @@ def save_layer_dropped_config(prune_model_save_path, model, tokenizer, accelerat
         accelerator.print(f"Reserved layers: {reserved_layer_list}")
 
         # 🔍 save the config
-        save_file = os.path.join(prune_model_save_path, "reserved_layers.json")
+        save_file = os.path.join(compressed_model_save_path, "reserved_layers.json")
         save_json(reserved_layer_list, save_file)
 
     accelerator.wait_for_everyone()
 
 
-def save_block_dropped_config(prune_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
+def save_block_dropped_config(compressed_model_save_path, model, tokenizer, accelerator: Accelerator, dropped_layer_list):
     # 🔍 save
     if accelerator.is_main_process:
-        if not os.path.exists(prune_model_save_path):
-            os.makedirs(prune_model_save_path)
+        if not os.path.exists(compressed_model_save_path):
+            os.makedirs(compressed_model_save_path)
 
         # 🔍 get new layer id mapping
         unwrapped_model = accelerator.unwrap_model(model)
@@ -103,7 +102,24 @@ def save_block_dropped_config(prune_model_save_path, model, tokenizer, accelerat
             layer_id_mapping[reserved_old_id] = new_id
 
         # 🔍 save the config
-        save_mapping_file = os.path.join(prune_model_save_path, "layer_mapping.json")
+        save_mapping_file = os.path.join(compressed_model_save_path, "layer_mapping.json")
         save_json(layer_id_mapping, save_mapping_file)
 
     accelerator.wait_for_everyone()
+
+
+def create_dir(dir):
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+
+def load_json(file_path):
+    with open(file_path, "r", encoding="utf8") as f:
+        data = json.load(f)
+    return data
+
+
+def save_json(data, file_path, indent=4, **kwargs):
+    create_dir(os.path.dirname(file_path))
+    with open(file_path, "w", encoding="utf8") as f:
+        f.write(f"{json.dumps(data, ensure_ascii=False, indent=indent, **kwargs)}\n")

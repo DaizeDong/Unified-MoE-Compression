@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING, List, Optional
 
 from transformers import Seq2SeqTrainingArguments
-
 from ...data import get_dataset, split_dataset
 from ...extras.constants import IGNORE_INDEX
 from ...extras.ploting import plot_loss
@@ -13,7 +12,6 @@ from ...train.dpo.collator import DPODataCollatorWithPadding
 from ...train.dpo.trainer import CustomDPOTrainer
 from ...train.utils import create_modelcard_and_push, create_ref_model
 
-
 if TYPE_CHECKING:
     from transformers import TrainerCallback
 
@@ -21,11 +19,11 @@ if TYPE_CHECKING:
 
 
 def run_dpo(
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    finetuning_args: "FinetuningArguments",
-    callbacks: Optional[List["TrainerCallback"]] = None,
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        finetuning_args: "FinetuningArguments",
+        callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage="rm")

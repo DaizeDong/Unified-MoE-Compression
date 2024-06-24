@@ -1,10 +1,8 @@
+from datasets import Features
 from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, List, Union
 
-from datasets import Features
-
 from .utils import Role
-
 
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
@@ -90,7 +88,7 @@ def convert_sharegpt(examples: Dict[str, List[Any]], dataset_attr: "DatasetAttr"
 
 
 def align_dataset(
-    dataset: Union["Dataset", "IterableDataset"], dataset_attr: "DatasetAttr", data_args: "DataArguments"
+        dataset: Union["Dataset", "IterableDataset"], dataset_attr: "DatasetAttr", data_args: "DataArguments"
 ) -> Union["Dataset", "IterableDataset"]:
     r"""
     Aligned dataset:

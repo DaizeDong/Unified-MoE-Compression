@@ -19,14 +19,13 @@
 # limitations under the License.
 """ PyTorch DeepSeek model."""
 import math
-import warnings
-from typing import List, Optional, Tuple, Union
-
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import warnings
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from typing import List, Optional, Tuple, Union
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -912,10 +911,6 @@ class DeepseekDecoderLayer(nn.Module):
 
         self.self_attn = Deepseek_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.input_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        # 🔍
-        # self.mlp = DeepseekMoE(config, layer_idx=layer_idx) if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0) else DeepseekMLP(config)
-        # self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # 🔍
         if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0):

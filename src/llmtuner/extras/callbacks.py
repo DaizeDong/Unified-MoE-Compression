@@ -6,15 +6,12 @@ from typing import TYPE_CHECKING
 
 from transformers import TrainerCallback
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, has_length
-
 from .constants import LOG_FILE_NAME
 from .logging import get_logger
 from .misc import fix_valuehead_checkpoint
 
-
 if TYPE_CHECKING:
     from transformers import TrainerControl, TrainerState, TrainingArguments
-
 
 logger = get_logger(__name__)
 
@@ -99,7 +96,7 @@ class LogCallback(TrainerCallback):
             self.max_steps = 0
 
     def on_predict(
-        self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", *other, **kwargs
+            self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", *other, **kwargs
     ):
         r"""
         Event called after a successful prediction.
@@ -140,7 +137,7 @@ class LogCallback(TrainerCallback):
             f.write(json.dumps(logs) + "\n")
 
     def on_prediction_step(
-        self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs
+            self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs
     ):
         r"""
         Event called after a prediction step.

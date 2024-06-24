@@ -1,7 +1,7 @@
 from collections import OrderedDict, defaultdict
+
 from enum import Enum
 from typing import Dict, Optional
-
 
 CHOICES = ["A", "B", "C", "D"]
 
@@ -53,9 +53,9 @@ class DownloadSource(str, Enum):
 
 
 def register_model_group(
-    models: Dict[str, Dict[DownloadSource, str]],
-    module: Optional[str] = None,
-    template: Optional[str] = None,
+        models: Dict[str, Dict[DownloadSource, str]],
+        module: Optional[str] = None,
+        template: Optional[str] = None,
 ) -> None:
     prefix = None
     for name, path in models.items():
@@ -89,7 +89,6 @@ register_model_group(
     template="baichuan",
 )
 
-
 register_model_group(
     models={
         "Baichuan2-7B-Base": {
@@ -113,7 +112,6 @@ register_model_group(
     template="baichuan2",
 )
 
-
 register_model_group(
     models={
         "BLOOM-560M": {
@@ -131,7 +129,6 @@ register_model_group(
     },
     module="query_key_value",
 )
-
 
 register_model_group(
     models={
@@ -151,7 +148,6 @@ register_model_group(
     module="query_key_value",
 )
 
-
 register_model_group(
     models={
         "BlueLM-7B-Base": {
@@ -166,7 +162,6 @@ register_model_group(
     template="bluelm",
 )
 
-
 register_model_group(
     models={
         "ChatGLM2-6B-Chat": {
@@ -177,7 +172,6 @@ register_model_group(
     module="query_key_value",
     template="chatglm2",
 )
-
 
 register_model_group(
     models={
@@ -193,7 +187,6 @@ register_model_group(
     module="query_key_value",
     template="chatglm3",
 )
-
 
 register_model_group(
     models={
@@ -224,7 +217,6 @@ register_model_group(
     },
     template="llama2_zh",
 )
-
 
 register_model_group(
     models={
@@ -262,7 +254,6 @@ register_model_group(
     template="deepseek",
 )
 
-
 register_model_group(
     models={
         "DeepSeekCoder-6.7B-Base": {
@@ -290,7 +281,6 @@ register_model_group(
     },
     template="deepseekcoder",
 )
-
 
 register_model_group(
     models={
@@ -323,7 +313,6 @@ register_model_group(
     template="falcon",
 )
 
-
 register_model_group(
     models={
         "Gemma-2B": {
@@ -341,7 +330,6 @@ register_model_group(
     },
     template="gemma",
 )
-
 
 register_model_group(
     models={
@@ -364,7 +352,6 @@ register_model_group(
     },
     template="intern",
 )
-
 
 register_model_group(
     models={
@@ -389,7 +376,6 @@ register_model_group(
     template="intern2",
 )
 
-
 register_model_group(
     models={
         "LingoWhale-8B": {
@@ -399,7 +385,6 @@ register_model_group(
     },
     module="qkv_proj",
 )
-
 
 register_model_group(
     models={
@@ -421,7 +406,6 @@ register_model_group(
         },
     }
 )
-
 
 register_model_group(
     models={
@@ -453,7 +437,6 @@ register_model_group(
     template="llama2",
 )
 
-
 register_model_group(
     models={
         "Mistral-7B": {
@@ -472,7 +455,6 @@ register_model_group(
     template="mistral",
 )
 
-
 register_model_group(
     models={
         "Mixtral-8x7B": {
@@ -487,7 +469,6 @@ register_model_group(
     template="mistral",
 )
 
-
 register_model_group(
     models={
         "OpenChat3.5-7B-Chat": {
@@ -497,7 +478,6 @@ register_model_group(
     },
     template="openchat",
 )
-
 
 register_model_group(
     models={
@@ -525,7 +505,6 @@ register_model_group(
     template="orion",
 )
 
-
 register_model_group(
     models={
         "Phi-1.5-1.3B": {
@@ -538,7 +517,6 @@ register_model_group(
         },
     }
 )
-
 
 register_model_group(
     models={
@@ -607,7 +585,6 @@ register_model_group(
     module="c_attn",
     template="qwen",
 )
-
 
 register_model_group(
     models={
@@ -711,7 +688,6 @@ register_model_group(
     template="qwen",
 )
 
-
 register_model_group(
     models={
         "SOLAR-10.7B": {
@@ -725,7 +701,6 @@ register_model_group(
     template="solar",
 )
 
-
 register_model_group(
     models={
         "Skywork-13B-Base": {
@@ -734,7 +709,6 @@ register_model_group(
         }
     }
 )
-
 
 register_model_group(
     models={
@@ -749,7 +723,6 @@ register_model_group(
     },
     template="vicuna",
 )
-
 
 register_model_group(
     models={
@@ -768,7 +741,6 @@ register_model_group(
     },
     template="xuanyuan",
 )
-
 
 register_model_group(
     models={
@@ -804,7 +776,6 @@ register_model_group(
     template="xverse",
 )
 
-
 register_model_group(
     models={
         "Yayi-7B": {
@@ -818,7 +789,6 @@ register_model_group(
     },
     template="yayi",
 )
-
 
 register_model_group(
     models={
@@ -850,7 +820,6 @@ register_model_group(
     template="yi",
 )
 
-
 register_model_group(
     models={
         "Yuan2-2B-Chat": {
@@ -868,7 +837,6 @@ register_model_group(
     },
     template="yuan",
 )
-
 
 register_model_group(
     models={

@@ -1,24 +1,21 @@
 from typing import TYPE_CHECKING
 
 import torch
-from peft import LoraConfig, LoraModel, PeftModel, TaskType, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, LoraModel, PeftModel, TaskType, get_peft_model
 from transformers.integrations import is_deepspeed_zero3_enabled
 
-from ..extras.logging import get_logger
 from .utils import find_all_linear_modules, find_expanded_modules
-
+from ..extras.logging import get_logger
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
-
     from ..hparams import FinetuningArguments, ModelArguments
-
 
 logger = get_logger(__name__)
 
 
 def init_adapter(
-    model: "PreTrainedModel", model_args: "ModelArguments", finetuning_args: "FinetuningArguments", is_trainable: bool
+        model: "PreTrainedModel", model_args: "ModelArguments", finetuning_args: "FinetuningArguments", is_trainable: bool
 ) -> "PreTrainedModel":
     r"""
     Initializes the adapters.
@@ -39,9 +36,9 @@ def init_adapter(
     if finetuning_args.finetuning_type == "freeze" and is_trainable:
         logger.info("Fine-tuning method: Freeze")
         num_layers = (
-            getattr(model.config, "num_hidden_layers", None)
-            or getattr(model.config, "num_layers", None)
-            or getattr(model.config, "n_layer", None)
+                getattr(model.config, "num_hidden_layers", None)
+                or getattr(model.config, "num_layers", None)
+                or getattr(model.config, "n_layer", None)
         )
         if not num_layers:
             raise ValueError("Current model does not support freeze tuning.")

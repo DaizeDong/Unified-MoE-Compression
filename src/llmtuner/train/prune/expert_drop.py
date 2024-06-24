@@ -10,8 +10,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from global_utils.io import create_dir, save_json
 from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralPreTrainedModel
+from .io import create_dir, save_json
 from .utils import print_gpu_memory, prepare_calibration_input, find_modules
 from .wrapper import MixtralExpertDropWrapper, DeepseekExpertDropWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel, MoEGate
@@ -34,7 +34,7 @@ def fill_missing_values_for_non_moe_layers(values: list, moe_layer_indices: list
 @torch.no_grad()
 def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
     """
-    :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
+    :param num_samples: samples on each device, calculated as "num_samples = n_compression_samples // num_processes"
     """
     device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
@@ -64,7 +64,6 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         valid_moe_layer_indices = [i for i in moe_layer_indices if num_experts[i] >= 0]
     else:
         valid_moe_layer_indices = moe_layer_indices
-    # TODO: support "valid_moe_layer" like global pruning
 
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
@@ -79,7 +78,7 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         print_gpu_memory(accelerator)
         layer = layers[i]
 
-        if i in moe_layer_indices:
+        if i in valid_moe_layer_indices:
             this_layer_num_experts = num_experts[i] if isinstance(num_experts, list) else num_experts
 
             if this_layer_num_experts > args.r:
@@ -100,6 +99,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                             wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
                         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
                             wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
+                        else:
+                            raise NotImplementedError
 
                     # Forward hook for recording metrics
                     def add_batch(name):
@@ -113,6 +114,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                             return mixtral_hook  # 🔍
                         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
                             return deepseek_hook  # 🔍
+                        else:
+                            raise NotImplementedError
 
                     # Get importance
                     handles = []
@@ -146,7 +149,7 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                             routing_scores.append(scores.float().cpu())
 
                 else:  # no expert left
-                    update_num_experts_list.append(0)
+                    update_num_experts_list.append(0)  # this denotes that this layer has no MoE, but has Norm
                     update_experts_idx.append([])
 
             else:  # do not drop as the remaining experts have already satisfied the requirement
@@ -154,6 +157,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                 update_experts_idx.append(list(range(this_layer_num_experts)))
 
         else:
+            update_num_experts_list.append(-1)  # this denotes that this layer has no MoE & Norm
+            update_experts_idx.append(None)
             for j in range(num_samples):
                 outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
 
@@ -178,6 +183,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
+    else:
+        raise NotImplementedError
 
     # 🔍 Save routing scores
     if args.score_save_file is not None:
@@ -240,6 +247,8 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                 subset = find_modules(layer, [MixtralSparseMoeBlock])
             elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                 subset = find_modules(layer, [MoEGate])
+            else:
+                raise NotImplementedError
 
             # Wrap layers
             wrapped_layers = {}
@@ -248,6 +257,8 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                     wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                     wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])
+                else:
+                    raise NotImplementedError
 
             # Forward hook for recording metrics
             def add_batch(name):
@@ -261,6 +272,8 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                     return mixtral_hook  # 🔍
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
                     return deepseek_hook  # 🔍
+                else:
+                    raise NotImplementedError
 
             # Get importance
             handles = []
@@ -303,7 +316,7 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
     num_experts_to_drop = round((avg_experts_per_moe_layer - args.r) * len(valid_moe_layer_indices))
 
     if num_experts_to_drop > 0:
-        if num_experts_to_drop < total_num_experts:
+        if num_experts_to_drop < total_num_experts:  # not all experts are dropped
             # 🔍 Cat scores
             global_scores = torch.cat(global_scores, dim=0)  # 🔍 gather the scores.
             accelerator.print(f"global_scores: {global_scores}")
@@ -382,10 +395,12 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
+    else:
+        raise NotImplementedError
 
 
 @torch.no_grad()
-def post_experts_drop(prune_model_save_path, model, tokenizer, config, accelerator: Accelerator, preserve_gate=False):
+def post_experts_drop(compressed_model_save_path, model, tokenizer, config, accelerator: Accelerator, preserve_gate=False):
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     layers = unwrapped_model.model.layers
     layer_experts_idx = config["layer_experts_idx"]
@@ -445,6 +460,9 @@ def post_experts_drop(prune_model_save_path, model, tokenizer, config, accelerat
                         layer.mlp = None
                         gate_num_experts.append(None)
 
+                else:
+                    raise NotImplementedError
+
             else:  # this layer is not MoE
                 gate_num_experts.append(None)
 
@@ -457,9 +475,9 @@ def post_experts_drop(prune_model_save_path, model, tokenizer, config, accelerat
             accelerator.print(f"Do not preserve dropped gate weights for the model.")
 
         # Save
-        unwrapped_model.save_pretrained(prune_model_save_path)
-        tokenizer.save_pretrained(prune_model_save_path)
-        save_json(config, os.path.join(prune_model_save_path, "config.json"), indent=2)
+        unwrapped_model.save_pretrained(compressed_model_save_path)
+        tokenizer.save_pretrained(compressed_model_save_path)
+        save_json(config, os.path.join(compressed_model_save_path, "config.json"), indent=2)
 
     accelerator.wait_for_everyone()
     accelerator.print(f"model: {model}")

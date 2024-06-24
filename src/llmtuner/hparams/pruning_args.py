@@ -2,8 +2,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Literal
 
 EXPERT_DROP_METHODS = ('global_pruning', 'layerwise_pruning', 'post_dropping')
-LAYER_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
-BLOCK_DROP_METHODS = ('consecutive', 'discrete', 'post_dropping')
+LAYER_DROP_METHODS = ('discrete', 'post_dropping')
+BLOCK_DROP_METHODS = ('discrete', 'consecutive', 'post_dropping')
 
 
 @dataclass
@@ -11,23 +11,19 @@ class PruningArguments:
     r"""
     Arguments pertaining to specify the decoding parameters.
     """
-    prune_seed: Optional[int] = field(
-        default=42,
-        metadata={"help": "Seed for sampling the calibration data."},
-    )
-    prune_method: Optional[str] = field(
+    compress_method: Optional[str] = field(
         default="wanda",
-        metadata={"choices": ["wanda", "sparsegpt", "magnitude", "expert_drop", "block_drop", "layer_drop"]},
+        metadata={"choices": ["magnitude", "wanda", "sparsegpt", "expert_drop", "block_drop", "layer_drop"]},
     )
-    prune_model_save_path: Optional[str] = field(
+    compressed_model_save_path: Optional[str] = field(
         default=None,
-        metadata={"help": "Path to save the pruned model."},
+        metadata={"help": "Path to save the compressed model."},
     )
-    n_calibration_samples: Optional[int] = field(
+    n_compression_samples: Optional[int] = field(
         default=128,
-        metadata={"help": "Number of calibration samples."},
+        metadata={"help": "Number of samples for compression."},
     )
-    prune_data_type: Literal["pt", "sft", "rm", "ppo"] = field(
+    data_type: Literal["pt", "sft", "rm", "ppo"] = field(
         default="sft",
         metadata={"choices": ["pt", "sft", "rm", "ppo"],
                   "help": "Path to save the pruned model."},
@@ -38,9 +34,9 @@ class PruningArguments:
         default=0.5,
         metadata={"help": "Sparsity Level."},
     )
-    sparsity_type: Optional[Literal["structured", "unstructured", "4:8", "2:4"]] = field(
+    sparsity_type: Optional[Literal["unstructured", "4:8", "2:4"]] = field(
         default="unstructured",
-        metadata={"choices": ["structured", "unstructured", "4:8", "2:4"]},
+        metadata={"choices": ["unstructured", "4:8", "2:4"]},
     )
     exclude_prune_module_name: Optional[str] = field(
         default=None,

@@ -1,9 +1,9 @@
 import gc
 import os
-from typing import TYPE_CHECKING, Dict, Tuple
-
 import torch
 from peft import PeftModel
+from typing import TYPE_CHECKING, Dict, Tuple
+
 from transformers import InfNanRemoveLogitsProcessor, LogitsProcessorList, PreTrainedModel
 from transformers.utils import (
     SAFE_WEIGHTS_NAME,
@@ -14,10 +14,8 @@ from transformers.utils import (
     is_torch_npu_available,
     is_torch_xpu_available,
 )
-
 from .constants import V_HEAD_SAFE_WEIGHTS_NAME, V_HEAD_WEIGHTS_NAME
 from .logging import get_logger
-
 
 _is_fp16_available = is_torch_npu_available() or is_torch_cuda_available()
 try:
@@ -25,12 +23,10 @@ try:
 except Exception:
     _is_bf16_available = False
 
-
 if TYPE_CHECKING:
     from trl import AutoModelForCausalLMWithValueHead
 
     from llmtuner.hparams import ModelArguments
-
 
 logger = get_logger(__name__)
 
@@ -79,7 +75,7 @@ def count_parameters(model: torch.nn.Module) -> Tuple[int, int]:
 
 
 def fix_valuehead_checkpoint(
-    model: "AutoModelForCausalLMWithValueHead", output_dir: str, safe_serialization: bool
+        model: "AutoModelForCausalLMWithValueHead", output_dir: str, safe_serialization: bool
 ) -> None:
     r"""
     The model is already unwrapped.

@@ -4,13 +4,11 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ..extras.logging import get_logger
 
-
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
     from transformers import TrainingArguments
 
     from llmtuner.hparams import DataArguments
-
 
 logger = get_logger(__name__)
 
@@ -47,7 +45,7 @@ def infer_max_len(source_len: int, target_len: int, max_len: int, reserved_label
 
 
 def split_dataset(
-    dataset: Union["Dataset", "IterableDataset"], data_args: "DataArguments", training_args: "TrainingArguments"
+        dataset: Union["Dataset", "IterableDataset"], data_args: "DataArguments", training_args: "TrainingArguments"
 ) -> Dict[str, "Dataset"]:
     if training_args.do_train:
         if data_args.val_size > 1e-6:  # Split the dataset

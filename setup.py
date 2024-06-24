@@ -19,7 +19,6 @@ def get_requires():
 
 
 def main():
-
     setup(
         name="llmtuner",
         version=get_version(),

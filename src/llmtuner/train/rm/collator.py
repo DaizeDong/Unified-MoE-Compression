@@ -1,7 +1,7 @@
+import torch
 from dataclasses import dataclass
 from typing import Any, Dict, Sequence
 
-import torch
 from transformers import DataCollatorWithPadding
 
 

@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING, List, Optional
 
 from transformers import Seq2SeqTrainingArguments
-
 from ...data import get_dataset, split_dataset
 from ...extras.callbacks import FixValueHeadModelCallback
 from ...extras.misc import fix_valuehead_checkpoint
@@ -14,7 +13,6 @@ from ...train.rm.metric import compute_accuracy
 from ...train.rm.trainer import PairwiseTrainer
 from ...train.utils import create_modelcard_and_push
 
-
 if TYPE_CHECKING:
     from transformers import TrainerCallback
 
@@ -22,11 +20,11 @@ if TYPE_CHECKING:
 
 
 def run_rm(
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    finetuning_args: "FinetuningArguments",
-    callbacks: Optional[List["TrainerCallback"]] = None,
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        finetuning_args: "FinetuningArguments",
+        callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     model, tokenizer = load_model_and_tokenizer(
         model_args, finetuning_args, training_args.do_train, add_valuehead=True

@@ -20,15 +20,14 @@
 """ PyTorch Mixtral model."""
 import inspect
 import math
-import warnings
-from typing import List, Optional, Tuple, Union
-
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import warnings
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.sparse import to_sparse_semi_structured
+from typing import List, Optional, Tuple, Union
+
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import (
@@ -51,7 +50,6 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-
 from .configuration_mixtral import MixtralConfig
 
 if is_flash_attn_2_available():
@@ -71,68 +69,6 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MixtralConfig"
-
-
-def is_semi_structured_weight(weight: torch.Tensor, tolerance_rate: float = 5e-7) -> bool:
-    """
-    🔍 Check if the weight is semi-structured (1:2 or 2:4).
-     :param tolerance_rate: the maximum ratio of tolerated errors in checking semi-structure to counter the Floating Point Error.
-    """
-    error_tolerance_num = math.ceil(tolerance_rate * weight.numel())
-
-    # Ensure the tensor is 2D.
-    # print("weight dim", weight.dim())
-    if weight.dim() != 2:
-        return False
-
-    # Check sparsity
-    mask = (weight == 0.)
-    # print("mask", mask)
-    # print("zero_num", mask.sum().item(), "total_num", weight.numel(), "required_zero_num", weight.numel() // 2)
-    if abs(mask.sum().item() - weight.numel() // 2) > error_tolerance_num:
-        return False
-
-    # Check 1:2
-    is_1_2 = True
-    if weight.shape[1] % 2 != 0:
-        is_1_2 = False
-    else:
-        error_num = 0
-        sparse_param_count_1_2 = torch.full((weight.shape[0],), 1, dtype=torch.int64, device=weight.device)
-        # print("sparse_param_count_1_2", sparse_param_count_1_2.shape, sparse_param_count_1_2)
-        for row_group in mask.split(2, dim=1):
-            # mask: shape(output_dim, input_dim)
-            # row_group: shape(output_dim, 2)
-            # print(row_group.sum(dim=1))
-            if not torch.equal(row_group.sum(dim=1), sparse_param_count_1_2):
-                error_num += 1
-                if error_num > error_tolerance_num:
-                    is_1_2 = False
-                    break
-    if is_1_2:
-        return True
-
-    # Check 2:4
-    is_2_4 = True
-    if weight.shape[1] % 4 != 0:
-        is_2_4 = False
-    else:
-        error_num = 0
-        sparse_param_count_2_4 = torch.full((weight.shape[0],), 2, dtype=torch.int64, device=weight.device)
-        # print("sparse_param_count_2_4", sparse_param_count_2_4.shape, sparse_param_count_2_4)
-        for row_group in mask.split(4, dim=1):
-            # mask: shape(output_dim, input_dim)
-            # row_group: shape(output_dim, 4)
-            # print(row_group.sum(dim=1))
-            if not torch.equal(row_group.sum(dim=1), sparse_param_count_2_4):
-                error_num += 1
-                if error_num > error_tolerance_num:
-                    is_2_4 = False
-                    break
-    if is_2_4:
-        return True
-
-    return False
 
 
 def load_balancing_loss_func(
@@ -1401,15 +1337,6 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
     def get_decoder(self):
         return self.model
-
-    def convert_semi_structured_weights(self, tolerance_rate: float = 1e-7):
-        # 🔍 Automatically check & convert semi-structured sparse weights in the model
-        for name, module in self.named_modules():
-            if isinstance(module, nn.Linear):
-                if is_semi_structured_weight(module.weight.data, tolerance_rate=tolerance_rate):
-                    module.weight = nn.Parameter(to_sparse_semi_structured(module.weight))
-                    print(f"Converted {name} weights to semi-structured weights")
-        return self
 
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

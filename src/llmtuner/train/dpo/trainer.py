@@ -1,14 +1,13 @@
 from collections import defaultdict
-from contextlib import nullcontext
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple, Union
 
 import torch
-from transformers import BatchEncoding, Trainer
+from contextlib import nullcontext
 from trl import DPOTrainer
 from trl.trainer.utils import disable_dropout_in_model
+from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple, Union
 
+from transformers import BatchEncoding, Trainer
 from ...extras.constants import IGNORE_INDEX
-
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
@@ -16,14 +15,14 @@ if TYPE_CHECKING:
 
 class CustomDPOTrainer(DPOTrainer):
     def __init__(
-        self,
-        beta: float,
-        loss_type: Literal["sigmoid", "hinge", "ipo", "kto_pair"],
-        ftx_gamma: float,
-        model: Union["PreTrainedModel", torch.nn.Module],
-        ref_model: Optional[Union["PreTrainedModel", torch.nn.Module]] = None,
-        disable_dropout: Optional[bool] = True,
-        **kwargs,
+            self,
+            beta: float,
+            loss_type: Literal["sigmoid", "hinge", "ipo", "kto_pair"],
+            ftx_gamma: float,
+            model: Union["PreTrainedModel", torch.nn.Module],
+            ref_model: Optional[Union["PreTrainedModel", torch.nn.Module]] = None,
+            disable_dropout: Optional[bool] = True,
+            **kwargs,
     ):
         if disable_dropout:
             disable_dropout_in_model(model)
@@ -55,7 +54,7 @@ class CustomDPOTrainer(DPOTrainer):
         if ref_model is not None:
             if self.is_deepspeed_enabled:
                 if not (
-                    getattr(ref_model, "is_loaded_in_8bit", False) or getattr(ref_model, "is_loaded_in_4bit", False)
+                        getattr(ref_model, "is_loaded_in_8bit", False) or getattr(ref_model, "is_loaded_in_4bit", False)
                 ):  # quantized models are already set on the correct device
                     self.ref_model = self._prepare_deepspeed(self.ref_model)
             else:
@@ -72,7 +71,7 @@ class CustomDPOTrainer(DPOTrainer):
         return -all_logps
 
     def concatenated_forward(
-        self, model: "PreTrainedModel", batch: Dict[str, torch.Tensor]
+            self, model: "PreTrainedModel", batch: Dict[str, torch.Tensor]
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
         batch_copied = BatchEncoding({k: v.detach().clone() for k, v in batch.items()})  # avoid error
 
@@ -92,10 +91,10 @@ class CustomDPOTrainer(DPOTrainer):
         return chosen_logps, rejected_logps, chosen_logits, rejected_logits
 
     def get_batch_loss_metrics(
-        self,
-        model: "PreTrainedModel",
-        batch: Dict[str, torch.Tensor],
-        train_eval: Optional[Literal["train", "eval"]] = "train",
+            self,
+            model: "PreTrainedModel",
+            batch: Dict[str, torch.Tensor],
+            train_eval: Optional[Literal["train", "eval"]] = "train",
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         r"""
         Computes the DPO loss and other metrics for the given batch of inputs for train or test.

@@ -1,11 +1,10 @@
 import logging
 import math
-
 import torch
 import torch.nn.functional as F
-import transformers
 from torch import nn as nn
 
+import transformers
 from llmtuner.model.deepseek.modeling_deepseek import MoEGate
 from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock
 
@@ -31,10 +30,6 @@ class WandaWrapper:
         self.score_memery = torch.zeros((1,), device=self.device, dtype=torch.float32)  # the summation of (score ** p)
         self.p = p
 
-    def add_scores(self, routing_scores):
-        # 🔍 compute scores to obtain sparse ratios.
-        self.score_memery += (routing_scores ** self.p).sum().float()  # add the token scores
-
     def add_batch(self, input, output, routing_scores=None):
         # 🔍 rescale inputs with scores
         if routing_scores is not None:
@@ -44,7 +39,8 @@ class WandaWrapper:
                 input = input * routing_scores
             else:
                 # add routing_scores to memory
-                self.add_scores(routing_scores)
+                # 🔍 compute scores to obtain sparse ratios.
+                self.score_memery += (routing_scores ** self.p).sum().float()  # add the token scores
 
         self.add_batch_no_score(input, output)
 

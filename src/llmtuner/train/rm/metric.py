@@ -1,6 +1,5 @@
-from typing import Dict, Sequence, Tuple, Union
-
 import numpy as np
+from typing import Dict, Sequence, Tuple, Union
 
 
 def compute_accuracy(eval_preds: Sequence[Union[np.ndarray, Tuple[np.ndarray]]]) -> Dict[str, float]:

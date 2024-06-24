@@ -10,18 +10,16 @@ from transformers import HfArgumentParser, Seq2SeqTrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils.versions import require_version
 
-from ..extras.logging import get_logger
-from ..extras.packages import is_unsloth_available
 from .data_args import DataArguments
 from .evaluation_args import EvaluationArguments
 from .finetuning_args import FinetuningArguments
 from .generating_args import GeneratingArguments
-from .pruning_args import PruningArguments
 from .model_args import ModelArguments
-
+from .pruning_args import PruningArguments
+from ..extras.logging import get_logger
+from ..extras.packages import is_unsloth_available
 
 logger = get_logger(__name__)
-
 
 _TRAIN_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, GeneratingArguments]
 _TRAIN_SPARSE_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, GeneratingArguments, PruningArguments]
@@ -35,6 +33,7 @@ _EVAL_ARGS = [ModelArguments, DataArguments, EvaluationArguments, FinetuningArgu
 _EVAL_SPARSE_ARGS = [ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments, PruningArguments]
 _EVAL_CLS = Tuple[ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments]
 _EVAL_SPARSE_CLS = Tuple[ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments, PruningArguments]
+
 
 def _check_dependencies(disabled: bool) -> None:
     if disabled:
@@ -150,9 +149,9 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
         raise ValueError("`predict_with_generate` cannot be set as True while training.")
 
     if (
-        training_args.do_train
-        and finetuning_args.finetuning_type == "freeze"
-        and finetuning_args.name_module_trainable is None
+            training_args.do_train
+            and finetuning_args.finetuning_type == "freeze"
+            and finetuning_args.name_module_trainable is None
     ):
         raise ValueError("Please specify `name_module_trainable` in Freeze training.")
 
@@ -166,10 +165,10 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
     _check_dependencies(disabled=finetuning_args.disable_version_checking)
 
     if (
-        training_args.do_train
-        and finetuning_args.finetuning_type == "lora"
-        and model_args.resize_vocab
-        and finetuning_args.additional_target is None
+            training_args.do_train
+            and finetuning_args.finetuning_type == "lora"
+            and model_args.resize_vocab
+            and finetuning_args.additional_target is None
     ):
         logger.warning("Add token embeddings to `additional_target` to make the added tokens trainable.")
 
@@ -187,9 +186,9 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
 
     # Post-process training arguments
     if (
-        training_args.local_rank != -1
-        and training_args.ddp_find_unused_parameters is None
-        and finetuning_args.finetuning_type == "lora"
+            training_args.local_rank != -1
+            and training_args.ddp_find_unused_parameters is None
+            and finetuning_args.finetuning_type == "lora"
     ):
         logger.warning("`ddp_find_unused_parameters` needs to be set as False for LoRA in DDP training.")
         training_args_dict = training_args.to_dict()
@@ -205,11 +204,11 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
         can_resume_from_checkpoint = True
 
     if (
-        training_args.resume_from_checkpoint is None
-        and training_args.do_train
-        and os.path.isdir(training_args.output_dir)
-        and not training_args.overwrite_output_dir
-        and can_resume_from_checkpoint
+            training_args.resume_from_checkpoint is None
+            and training_args.do_train
+            and os.path.isdir(training_args.output_dir)
+            and not training_args.overwrite_output_dir
+            and can_resume_from_checkpoint
     ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
@@ -226,9 +225,9 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
             )
 
     if (
-        finetuning_args.stage in ["rm", "ppo"]
-        and finetuning_args.finetuning_type == "lora"
-        and training_args.resume_from_checkpoint is not None
+            finetuning_args.stage in ["rm", "ppo"]
+            and finetuning_args.finetuning_type == "lora"
+            and training_args.resume_from_checkpoint is not None
     ):
         logger.warning(
             "Add {} to `adapter_name_or_path` to resume training from checkpoint.".format(
@@ -295,9 +294,9 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
         raise ValueError("`predict_with_generate` cannot be set as True while training.")
 
     if (
-        training_args.do_train
-        and finetuning_args.finetuning_type == "freeze"
-        and finetuning_args.name_module_trainable is None
+            training_args.do_train
+            and finetuning_args.finetuning_type == "freeze"
+            and finetuning_args.name_module_trainable is None
     ):
         raise ValueError("Please specify `name_module_trainable` in Freeze training.")
 
@@ -311,10 +310,10 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
     _check_dependencies(disabled=finetuning_args.disable_version_checking)
 
     if (
-        training_args.do_train
-        and finetuning_args.finetuning_type == "lora"
-        and model_args.resize_vocab
-        and finetuning_args.additional_target is None
+            training_args.do_train
+            and finetuning_args.finetuning_type == "lora"
+            and model_args.resize_vocab
+            and finetuning_args.additional_target is None
     ):
         logger.warning("Add token embeddings to `additional_target` to make the added tokens trainable.")
 
@@ -332,9 +331,9 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
 
     # Post-process training arguments
     if (
-        training_args.local_rank != -1
-        and training_args.ddp_find_unused_parameters is None
-        and finetuning_args.finetuning_type == "lora"
+            training_args.local_rank != -1
+            and training_args.ddp_find_unused_parameters is None
+            and finetuning_args.finetuning_type == "lora"
     ):
         logger.warning("`ddp_find_unused_parameters` needs to be set as False for LoRA in DDP training.")
         training_args_dict = training_args.to_dict()
@@ -350,11 +349,11 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
         can_resume_from_checkpoint = True
 
     if (
-        training_args.resume_from_checkpoint is None
-        and training_args.do_train
-        and os.path.isdir(training_args.output_dir)
-        and not training_args.overwrite_output_dir
-        and can_resume_from_checkpoint
+            training_args.resume_from_checkpoint is None
+            and training_args.do_train
+            and os.path.isdir(training_args.output_dir)
+            and not training_args.overwrite_output_dir
+            and can_resume_from_checkpoint
     ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
@@ -371,9 +370,9 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
             )
 
     if (
-        finetuning_args.stage in ["rm", "ppo"]
-        and finetuning_args.finetuning_type == "lora"
-        and training_args.resume_from_checkpoint is not None
+            finetuning_args.stage in ["rm", "ppo"]
+            and finetuning_args.finetuning_type == "lora"
+            and training_args.resume_from_checkpoint is not None
     ):
         logger.warning(
             "Add {} to `adapter_name_or_path` to resume training from checkpoint.".format(
@@ -430,6 +429,7 @@ def get_eval_args(args: Optional[Dict[str, Any]] = None) -> _EVAL_CLS:
     transformers.set_seed(eval_args.seed)
 
     return model_args, data_args, eval_args, finetuning_args
+
 
 def get_eval_sparse_args(args: Optional[Dict[str, Any]] = None) -> _EVAL_SPARSE_CLS:
     model_args, data_args, eval_args, finetuning_args, pruning_args = _parse_eval_sparse_args(args)

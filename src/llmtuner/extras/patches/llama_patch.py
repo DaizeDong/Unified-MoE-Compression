@@ -1,8 +1,8 @@
 import math
-from typing import Optional, Tuple
-
 import torch
 import torch.nn as nn
+from typing import Optional, Tuple
+
 from transformers.models.llama.modeling_llama import (
     Cache,
     LlamaAttention,
@@ -12,19 +12,18 @@ from transformers.models.llama.modeling_llama import (
 )
 from transformers.utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
 # Modified from: https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py
 def llama_torch_attn_forward(
-    self: "LlamaAttention",
-    hidden_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
-    position_ids: Optional[torch.LongTensor] = None,
-    past_key_value: Optional["Cache"] = None,
-    output_attentions: bool = False,
-    **kwargs,
+        self: "LlamaAttention",
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional["Cache"] = None,
+        output_attentions: bool = False,
+        **kwargs,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
     bsz, q_len, _ = hidden_states.size()
 
@@ -58,7 +57,7 @@ def llama_torch_attn_forward(
         def shift(state: torch.Tensor) -> torch.Tensor:
             state = state.transpose(1, 2)  # output: (bsz, seq_len, n_heads, head_dim)
             state = torch.cat(
-                (state[:, :, : self.num_heads // 2], state[:, :, self.num_heads // 2 :].roll(-groupsz // 2, dims=1)),
+                (state[:, :, : self.num_heads // 2], state[:, :, self.num_heads // 2:].roll(-groupsz // 2, dims=1)),
                 dim=2,
             )
             return state.reshape(bsz * num_groups, groupsz, self.num_heads, self.head_dim).transpose(1, 2)
@@ -83,7 +82,7 @@ def llama_torch_attn_forward(
         attn_output = torch.cat(
             (
                 attn_output[:, :, : self.num_heads // 2],
-                attn_output[:, :, self.num_heads // 2 :].roll(groupsz // 2, dims=1),
+                attn_output[:, :, self.num_heads // 2:].roll(groupsz // 2, dims=1),
             )
         )
 
@@ -98,13 +97,13 @@ def llama_torch_attn_forward(
 
 # Modified from: https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py
 def llama_flash_attn_forward(
-    self: "LlamaFlashAttention2",
-    hidden_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
-    position_ids: Optional[torch.LongTensor] = None,
-    past_key_value: Optional[Tuple[torch.Tensor]] = None,
-    output_attentions: bool = False,
-    **kwargs,
+        self: "LlamaFlashAttention2",
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        **kwargs,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
     # LlamaFlashAttention2 attention does not support output_attentions
     output_attentions = False
@@ -161,7 +160,7 @@ def llama_flash_attn_forward(
 
         def shift(state: torch.Tensor) -> torch.Tensor:
             state = torch.cat(
-                (state[:, :, : self.num_heads // 2], state[:, :, self.num_heads // 2 :].roll(-groupsz // 2, dims=1)),
+                (state[:, :, : self.num_heads // 2], state[:, :, self.num_heads // 2:].roll(-groupsz // 2, dims=1)),
                 dim=2,
             )
             return state.reshape(bsz * num_groups, groupsz, self.num_heads, self.head_dim)
@@ -179,7 +178,7 @@ def llama_flash_attn_forward(
         attn_output = torch.cat(
             (
                 attn_output[:, :, : self.num_heads // 2],
-                attn_output[:, :, self.num_heads // 2 :].roll(groupsz // 2, dims=1),
+                attn_output[:, :, self.num_heads // 2:].roll(groupsz // 2, dims=1),
             )
         )
 

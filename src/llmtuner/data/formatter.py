@@ -4,14 +4,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Sequence, Set, Tuple, Union
 
-
 SLOTS = Sequence[Union[str, Set[str], Dict[str, str]]]
-
 
 JSON_FORMAT_PROMPT = (
     """, in a JSON format representing the kwargs (e.g. ```{"input": "hello world", "num_beams": 5}```)"""
 )
-
 
 TOOL_SYSTEM_PROMPT = (
     "You have access to the following tools:\n{tool_text}"

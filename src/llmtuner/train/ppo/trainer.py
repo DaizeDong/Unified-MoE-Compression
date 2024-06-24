@@ -1,29 +1,26 @@
 import math
 import os
 import sys
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
-
 import torch
 from tqdm import tqdm
+from trl import PPOTrainer
+from trl.core import PPODecorators, logprobs_from_logits
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+
 from transformers import GenerationConfig, Trainer, TrainerControl, TrainerState
 from transformers.trainer_pt_utils import remove_dummy_checkpoint
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
-from trl import PPOTrainer
-from trl.core import PPODecorators, logprobs_from_logits
-
+from .utils import dump_layernorm, get_rewards_from_server, replace_model, restore_layernorm
 from ...extras.callbacks import FixValueHeadModelCallback, LogCallback
 from ...extras.logging import get_logger
 from ...extras.misc import AverageMeter, count_parameters, get_logits_processor
-from .utils import dump_layernorm, get_rewards_from_server, replace_model, restore_layernorm
-
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
     from trl import AutoModelForCausalLMWithValueHead
 
     from ...hparams import FinetuningArguments, GeneratingArguments, ModelArguments
-
 
 logger = get_logger(__name__)
 
@@ -34,14 +31,14 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
     """
 
     def __init__(
-        self,
-        model_args: "ModelArguments",
-        training_args: "Seq2SeqTrainingArguments",
-        finetuning_args: "FinetuningArguments",
-        generating_args: "GeneratingArguments",
-        callbacks: List["TrainerCallback"],
-        reward_model: "AutoModelForCausalLMWithValueHead",
-        **kwargs,
+            self,
+            model_args: "ModelArguments",
+            training_args: "Seq2SeqTrainingArguments",
+            finetuning_args: "FinetuningArguments",
+            generating_args: "GeneratingArguments",
+            callbacks: List["TrainerCallback"],
+            reward_model: "AutoModelForCausalLMWithValueHead",
+            **kwargs,
     ):
         PPOTrainer.__init__(self, **kwargs)
 
@@ -70,8 +67,8 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         if finetuning_args.reward_model_type == "full":
             if self.is_deepspeed_enabled:
                 if not (
-                    getattr(reward_model.pretrained_model, "is_loaded_in_8bit", False)
-                    or getattr(reward_model.pretrained_model, "is_loaded_in_4bit", False)
+                        getattr(reward_model.pretrained_model, "is_loaded_in_8bit", False)
+                        or getattr(reward_model.pretrained_model, "is_loaded_in_4bit", False)
                 ):  # quantized models are already set on the correct device
                     self.reward_model = self._prepare_deepspeed(self.reward_model)
             else:
@@ -85,10 +82,10 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             raise ValueError("`resume_from_checkpoint` will be supported in the future version.")
 
         total_train_batch_size = (
-            self.args.per_device_train_batch_size
-            * self.args.gradient_accumulation_steps
-            * self.finetuning_args.ppo_buffer_size
-            * self.args.world_size
+                self.args.per_device_train_batch_size
+                * self.args.gradient_accumulation_steps
+                * self.finetuning_args.ppo_buffer_size
+                * self.args.world_size
         )
         if self.args.max_steps > 0:
             num_examples = total_train_batch_size * self.args.max_steps
@@ -145,7 +142,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             queries, responses, rewards = [], [], []
             for idx in range(0, self.config.batch_size, self.config.mini_batch_size):
                 mini_batch_queries, mini_batch_responses = self.get_inputs(
-                    batch[idx : idx + self.config.mini_batch_size]
+                    batch[idx: idx + self.config.mini_batch_size]
                 )
                 mini_batch_rewards = self.get_rewards(mini_batch_queries, mini_batch_responses, unwrapped_model)
                 queries.extend(mini_batch_queries)
@@ -226,7 +223,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             restore_layernorm(self.model, layernorm_params)
 
         query = batch["input_ids"].detach().cpu()
-        response = generate_output[:, batch["input_ids"].size(-1) :].detach().cpu()
+        response = generate_output[:, batch["input_ids"].size(-1):].detach().cpu()
         queries, responses = [], []
         for i in range(len(query)):
             query_start_index = (query[i] != self.tokenizer.pad_token_id).nonzero()[0].item()
@@ -244,10 +241,10 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
 
     @torch.no_grad()
     def get_rewards(
-        self,
-        queries: List[torch.Tensor],
-        responses: List[torch.Tensor],
-        unwrapped_model: "AutoModelForCausalLMWithValueHead",
+            self,
+            queries: List[torch.Tensor],
+            responses: List[torch.Tensor],
+            unwrapped_model: "AutoModelForCausalLMWithValueHead",
     ) -> List[torch.Tensor]:
         r"""
         Computes scores using given reward model.
@@ -286,13 +283,13 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
 
     @PPODecorators.empty_device_cache()
     def batched_forward_pass(
-        self,
-        model: "AutoModelForCausalLMWithValueHead",
-        queries: torch.Tensor,
-        responses: torch.Tensor,
-        model_inputs: dict,
-        return_logits: Optional[bool] = False,
-        response_masks: Optional[torch.Tensor] = None,
+            self,
+            model: "AutoModelForCausalLMWithValueHead",
+            queries: torch.Tensor,
+            responses: torch.Tensor,
+            model_inputs: dict,
+            return_logits: Optional[bool] = False,
+            response_masks: Optional[torch.Tensor] = None,
     ):
         r"""
         Calculates model outputs in multiple batches.
@@ -307,11 +304,11 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         all_values = []
 
         for i in range(math.ceil(bs / fbs)):
-            input_kwargs = {key: value[i * fbs : (i + 1) * fbs] for key, value in model_inputs.items()}
-            query_batch = queries[i * fbs : (i + 1) * fbs]
-            response_batch = responses[i * fbs : (i + 1) * fbs]
+            input_kwargs = {key: value[i * fbs: (i + 1) * fbs] for key, value in model_inputs.items()}
+            query_batch = queries[i * fbs: (i + 1) * fbs]
+            response_batch = responses[i * fbs: (i + 1) * fbs]
             if response_masks is not None:
-                response_masks_batch = response_masks[i * fbs : (i + 1) * fbs]
+                response_masks_batch = response_masks[i * fbs: (i + 1) * fbs]
             input_ids = input_kwargs["input_ids"]
             attention_mask = input_kwargs["attention_mask"]
 

@@ -1,10 +1,9 @@
 import sys
-
 import torch
 from accelerate import Accelerator
 from tqdm import tqdm
-from transformers import MixtralPreTrainedModel
 
+from transformers import MixtralPreTrainedModel
 from .utils import find_moe_expert_linears, prepare_calibration_input, print_gpu_memory
 from .wrapper import WandaWrapper, SparseGPTWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
@@ -25,6 +24,9 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         num_layers = unwrapped_model.config.num_hidden_layers
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
+    else:
+        raise NotImplementedError
+
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
     # 🔍 store the pruned parameters in CPU
@@ -39,7 +41,7 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
 
         if i in moe_layer_indices:
             # Find modules
-            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compress
+            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compression
 
             # Prune
             layer.to(device)  # 🔍
@@ -75,7 +77,7 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
 @torch.no_grad()
 def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0):
     """
-    :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
+    :param num_samples: samples on each device, calculated as "num_samples = n_compression_samples // num_processes"
     """
     device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
@@ -90,6 +92,9 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         num_layers = unwrapped_model.config.num_hidden_layers
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
+    else:
+        raise NotImplementedError
+
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
     # 🔍 store the pruned parameters in CPU
@@ -107,7 +112,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
 
         if i in moe_layer_indices:
             # Find modules
-            subset_experts = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compress
+            subset_experts = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compression
 
             # Wrap layers
             wrapped_layers = {}
@@ -115,15 +120,10 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
                 wrapped_layers[name] = WandaWrapper(subset_experts[name], layer_name=name, multiply_score=False, p=1)  # 🔍
 
             # Forward hook for recording row importance
-            def add_batch_linear(name):
-                def hook(_, input, output):
-                    wrapped_layers[name].add_batch_no_score(input[0].data, output.data)
-
-                return hook
-
             def add_batch_experts(name):
                 def hook(_, input, output):
-                    wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if (len(input) >= 2 and input[1] is not None) else None)  # 🔍 input[1] is routing scores.
+                    wrapped_layers[name].add_batch(input[0].data, output.data,None)
+                    # wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if (len(input) >= 2 and input[1] is not None) else None)  # 🔍 input[1] is routing scores.
 
                 return hook
 
@@ -210,7 +210,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
 def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_samples, prune_n=0, prune_m=0, blocksize=128, percdamp=0.01):
     """
         SparseGPT code available at: https://github.com/IST-DASLab/sparsegpt/tree/f5c25005a61f96a0933ca2f95705a963585aafaa
-        :param num_samples: samples on each device, calculated as "num_samples = n_calibration_samples // num_processes"
+        :param num_samples: samples on each device, calculated as "num_samples = n_compression_samples // num_processes"
     """
     device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
@@ -225,6 +225,9 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         num_layers = unwrapped_model.config.num_hidden_layers
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
+    else:
+        raise NotImplementedError
+
     accelerator.print("moe_layer_indices", moe_layer_indices)
 
     # 🔍 store the pruned parameters in CPU
@@ -242,7 +245,7 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
 
         if i in moe_layer_indices:
             # Find modules
-            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compress
+            subset = find_moe_expert_linears(layer, exclude_names=args.exclude_prune_module_name)  # 🔍 Find layers to compression
 
             # Wrap layers
             wrapped_layers = {}

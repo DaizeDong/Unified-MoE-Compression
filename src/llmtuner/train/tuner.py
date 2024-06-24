@@ -1,6 +1,5 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
 import torch
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from transformers import PreTrainedModel
 from .dpo import run_dpo

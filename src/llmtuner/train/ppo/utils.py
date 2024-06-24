@@ -1,12 +1,10 @@
 import json
+import torch
 from contextlib import nullcontext
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
-import torch
 from transformers.integrations import is_deepspeed_zero3_enabled
-
 from ...extras.packages import is_requests_available
-
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel

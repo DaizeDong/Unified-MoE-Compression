@@ -1,13 +1,12 @@
 # Inspired by: https://github.com/lvwerra/trl/blob/main/examples/research_projects/stack_llama/scripts/rl_training.py
 
 import math
+from torch.optim import AdamW
+from trl import PPOConfig
 from typing import TYPE_CHECKING, List, Optional
 
-from torch.optim import AdamW
 from transformers import DataCollatorWithPadding
 from transformers.optimization import get_scheduler
-from trl import PPOConfig
-
 from ...data import get_dataset
 from ...extras.callbacks import FixValueHeadModelCallback
 from ...extras.misc import fix_valuehead_checkpoint
@@ -16,7 +15,6 @@ from ...model import load_model_and_tokenizer
 from ...train.ppo.trainer import CustomPPOTrainer
 from ...train.utils import create_ref_model, create_reward_model
 
-
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
 
@@ -24,12 +22,12 @@ if TYPE_CHECKING:
 
 
 def run_ppo(
-    model_args: "ModelArguments",
-    data_args: "DataArguments",
-    training_args: "Seq2SeqTrainingArguments",
-    finetuning_args: "FinetuningArguments",
-    generating_args: "GeneratingArguments",
-    callbacks: Optional[List["TrainerCallback"]] = None,
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        training_args: "Seq2SeqTrainingArguments",
+        finetuning_args: "FinetuningArguments",
+        generating_args: "GeneratingArguments",
+        callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     model, tokenizer = load_model_and_tokenizer(
         model_args, finetuning_args, training_args.do_train, add_valuehead=True
