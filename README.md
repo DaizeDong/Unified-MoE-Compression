@@ -30,6 +30,9 @@ pip install flash-attn --no-build-isolation
 cd ./AutoAWQ
 pip install -e .
 
+cd ./AutoAWQ/AutoAWQ_kernels
+pip install -e .
+
 cd ../AutoGPTQ
 pip install -vvv --no-build-isolation -e .
 ```
@@ -59,11 +62,7 @@ bash scripts/compression/pruning/deepseek_prune_noshared.sh
 ```
 
 #### Quantization
-Please refer to [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ) and [AutoAWQ](https://github.com/casper-hansen/AutoAWQ). Ensure you carefully install the packages that correspond to your CUDA version. Additionally, for AWQ, you need to install the AWQ_Kernels:
-```
-cd AutoAWQ/AutoAWQ_kernels
-pip install -e .
-```
+Please refer to [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ) and [AutoAWQ](https://github.com/casper-hansen/AutoAWQ). Ensure you carefully install the packages that correspond to your CUDA version.
 For quantization, use the following scripts:
 ```bash
 bash scripts/compression/quantization/awq.sh
