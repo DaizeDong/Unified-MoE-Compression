@@ -27,13 +27,11 @@ if "deepseek" in model_path.lower():
 else:
     q_group_size = 128
 
-modules_to_not_convert = ["self_attn"]
 quant_config = {
     "zero_point": True,
     "q_group_size": q_group_size,
     "w_bit": int(bits),
     "version": "GEMM",
-    # "modules_to_not_convert": modules_to_not_convert,
 }
 
 print(f"quant_config: {quant_config}")
