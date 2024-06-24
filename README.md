@@ -59,7 +59,12 @@ bash scripts/compression/pruning/deepseek_prune_noshared.sh
 ```
 
 #### Quantization
-
+Please refer to [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ) and [AutoAWQ](https://github.com/casper-hansen/AutoAWQ). Ensure you carefully install the packages that correspond to your CUDA version. Additionally, for AWQ, you need to install the AWQ_Kernels:
+```
+cd AutoAWQ/AutoAWQ_kernels
+pip install -e .
+```
+For quantization, use the following scripts:
 ```bash
 bash scripts/compression/quantization/awq.sh
 bash scripts/compression/quantization/gptq.sh
@@ -127,7 +132,7 @@ TODO: Add lm-evaluation-harness here.
 
 Please refer to [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness).
 
-Remember to use the modeling files in `src/llmtuner/model` to load the Mixture and DeepSeek models.
+Remember to use the modeling files in `src/llmtuner/model` to load the Mixtral and DeepSeek models.
 
 ## Citation
 
