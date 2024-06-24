@@ -113,7 +113,6 @@ def load_model(model_path, model_type, quant_file, n_generate, batch_size, no_sa
     if model_type == "normal":
         if model is not None:  # use the last loaded model to save time
             return model
-
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             low_cpu_mem_usage=True,
@@ -122,46 +121,37 @@ def load_model(model_path, model_type, quant_file, n_generate, batch_size, no_sa
         )
 
     elif model_type == "quantized":
-        if pretrained:
-            model = AutoAWQForCausalLM.from_pretrained(
-                model_path,
-                safetensors=not no_safetensors,
-                low_cpu_mem_usage=True,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
+        # AWQ
+        if "AWQ" in model_path:
+            model = AutoAWQForCausalLM.from_quantized(
+                model_path, quant_file, fuse_layers=True,
+                max_seq_len=n_generate, batch_size=batch_size,
+                safetensors=not no_safetensors
             )
+        # GPTQ
         else:
-            # AWQ
-            if "AWQ" in model_path:
-                model = AutoAWQForCausalLM.from_quantized(
-                    model_path, quant_file, fuse_layers=True,
-                    max_seq_len=n_generate, batch_size=batch_size,
-                    safetensors=not no_safetensors
-                )
-            # GPTQ
-            else:
-                quantize_config = BaseQuantizeConfig.from_pretrained(model_path)
-                inject_fused_attention = True
-                inject_fused_mlp = True
-                use_triton = True
-                use_triton = False
-                use_safetensors = True
-                model = AutoGPTQForCausalLM.from_quantized(
-                    model_path,
-                    # max_memory=max_memory,
-                    low_cpu_mem_usage=True,
-                    use_triton=use_triton,
-                    inject_fused_attention=inject_fused_attention,
-                    inject_fused_mlp=inject_fused_mlp,
-                    use_cuda_fp16=True,
-                    quantize_config=quantize_config,
-                    # model_basename=model_basename,
-                    use_safetensors=use_safetensors,
-                    # trust_remote_code=trust_remote_code,
-                    # warmup_triton=False,
-                    # disable_exllama=disable_exllama,
-                )
-                setattr(model, "quant_config", quantize_config)
+            quantize_config = BaseQuantizeConfig.from_pretrained(model_path)
+            inject_fused_attention = True
+            inject_fused_mlp = True
+            use_triton = True
+            use_triton = False
+            use_safetensors = True
+            model = AutoGPTQForCausalLM.from_quantized(
+                model_path,
+                # max_memory=max_memory,
+                low_cpu_mem_usage=True,
+                use_triton=use_triton,
+                inject_fused_attention=inject_fused_attention,
+                inject_fused_mlp=inject_fused_mlp,
+                use_cuda_fp16=True,
+                quantize_config=quantize_config,
+                # model_basename=model_basename,
+                use_safetensors=use_safetensors,
+                # trust_remote_code=trust_remote_code,
+                # warmup_triton=False,
+                # disable_exllama=disable_exllama,
+            )
+            setattr(model, "quant_config", quantize_config)
     else:
         raise ValueError(model_type)
 
