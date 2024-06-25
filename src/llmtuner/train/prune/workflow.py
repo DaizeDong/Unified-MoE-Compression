@@ -1,10 +1,11 @@
 import os
+from typing import TYPE_CHECKING, List, Optional
+
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from torch.utils.data import DataLoader
-from typing import TYPE_CHECKING, List, Optional
-
 from transformers import DataCollatorForSeq2Seq, DataCollatorForLanguageModeling, DataCollatorWithPadding
+
 from .block_drop import consecutive_block_dropping, discrete_block_dropping, post_block_drop
 from .expert_drop import layerwise_pruning, global_pruning, post_experts_drop
 from .io import save_sparse_model, save_expert_dropped_config, save_block_dropped_config, save_layer_dropped_config, load_json

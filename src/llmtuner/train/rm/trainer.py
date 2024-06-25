@@ -1,9 +1,10 @@
 import json
 import os
-import torch
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+import torch
 from transformers import Trainer
+
 from ...extras.logging import get_logger
 
 if TYPE_CHECKING:

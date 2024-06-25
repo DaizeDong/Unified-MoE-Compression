@@ -8,7 +8,6 @@ from typing import Optional
 import huggingface_hub
 from transformers.utils.hub import PushToHubMixin, cached_file
 
-
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 formatter = logging.Formatter("%(levelname)s - %(message)s")
@@ -93,7 +92,7 @@ class BaseQuantizeConfig(PushToHubMixin):
             raise ValueError("damp_percent must between 0 and 1.")
 
     def save_pretrained(self, save_dir: str, **kwargs):
-        with open(join(save_dir,  QUANT_CONFIG_FILENAME), "w", encoding="utf-8") as f:
+        with open(join(save_dir, QUANT_CONFIG_FILENAME), "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2)
 
     @classmethod

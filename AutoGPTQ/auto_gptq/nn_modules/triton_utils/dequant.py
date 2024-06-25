@@ -19,17 +19,17 @@ DEFAULT_DEQUANT_CONFIGS = make_dequant_configs([128, 256, 512, 1024], [4, 8])
 @triton.autotune(DEFAULT_DEQUANT_CONFIGS, key=["numels"])
 @triton.jit
 def dequant_kernel_248(
-    g_idx_ptr,
-    scales_ptr,
-    qweight_ptr,
-    qzeros_ptr,
-    out_ptr,
-    numels,
-    maxq: tl.constexpr,
-    bits: tl.constexpr,
-    outfeatures: tl.constexpr,
-    num_groups: tl.constexpr,
-    X_BLOCK: tl.constexpr,
+        g_idx_ptr,
+        scales_ptr,
+        qweight_ptr,
+        qzeros_ptr,
+        out_ptr,
+        numels,
+        maxq: tl.constexpr,
+        bits: tl.constexpr,
+        outfeatures: tl.constexpr,
+        num_groups: tl.constexpr,
+        X_BLOCK: tl.constexpr,
 ):
     # Block indexing
     xoffset = tl.program_id(0) * X_BLOCK
@@ -95,7 +95,7 @@ def dequant248(qweight, scales, qzeros, g_idx, bits, maxq=None):
 
     out = torch.empty((infeatures, outfeatures), device="cuda", dtype=torch.float16)
     numels = out.numel()
-    maxq = 2**bits - 1 if maxq is None else maxq
+    maxq = 2 ** bits - 1 if maxq is None else maxq
     grid = lambda meta: (triton.cdiv(numels, meta["X_BLOCK"]),)  # noqa: E731
 
     dequant_kernel_248[grid](
@@ -114,7 +114,7 @@ def dequant248(qweight, scales, qzeros, g_idx, bits, maxq=None):
 
 
 def quant_matmul_248(
-    input, qweight, scales, qzeros, g_idx, bits, maxq=None, transpose=False
+        input, qweight, scales, qzeros, g_idx, bits, maxq=None, transpose=False
 ):
     W = dequant248(qweight, scales, qzeros, g_idx, bits, maxq=maxq)
     if transpose:

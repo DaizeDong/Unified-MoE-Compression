@@ -2,6 +2,7 @@ from transformers.models.falcon.modeling_falcon import (
     FalconDecoderLayer as OldFalconDecoderLayer,
     FalconForCausalLM,
 )
+
 from .base import BaseAWQForCausalLM
 
 

@@ -1,12 +1,12 @@
 import copy
 import random
-import torch
-from datasets import DatasetDict, IterableDatasetDict, load_dataset
 from functools import partial
-from torch import LongTensor
-from torch.utils.data import DataLoader
 from typing import Callable, Dict, List, Optional
 
+import torch
+from datasets import DatasetDict, IterableDatasetDict, load_dataset
+from torch import LongTensor
+from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizer
 
 

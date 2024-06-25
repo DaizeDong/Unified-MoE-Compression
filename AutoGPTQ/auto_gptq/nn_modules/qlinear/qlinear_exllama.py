@@ -1,12 +1,11 @@
 # Adapted from turboderp exllama: https://github.com/turboderp/exllama
 
+import math
 from logging import getLogger
 
-import math
 import numpy as np
 import torch
 import torch.nn as nn
-
 import transformers
 
 logger = getLogger(__name__)

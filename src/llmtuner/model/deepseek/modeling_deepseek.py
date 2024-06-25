@@ -19,14 +19,14 @@
 # limitations under the License.
 """ PyTorch DeepSeek model."""
 import math
+import warnings
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import warnings
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import List, Optional, Tuple, Union
-
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import (
@@ -47,6 +47,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
+
 from .configuration_deepseek import DeepseekConfig
 
 if is_flash_attn_2_available():

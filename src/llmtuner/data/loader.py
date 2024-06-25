@@ -1,7 +1,8 @@
 import inspect
 import os
-from datasets import concatenate_datasets, interleave_datasets, load_dataset, load_from_disk
 from typing import TYPE_CHECKING, List, Literal, Union
+
+from datasets import concatenate_datasets, interleave_datasets, load_dataset, load_from_disk
 
 from .aligner import align_dataset
 from .parser import get_dataset_list

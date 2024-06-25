@@ -2,7 +2,9 @@
 
 **[Shwai He](https://shwai-he.github.io/)\*, [Daize Dong](https://daizedong.github.io/)\*, [Liang Ding](https://liamding.cc/), [Ang Li](https://www.ang-li.com/)**
 
-**This is the official implementation of the paper [Demystifying the Compression of Mixture-of-Experts Through a Unified Framework](https://arxiv.org/abs/2406.02500).** We provide a comprehensive framework for compressing Mixture-of-Experts models. Pipeline for pruning and Expert Trimming is based on the [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory). The quantization is implemented based on the [AutoAWQ](https://github.com/casper-hansen/AutoAWQ) and [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ).
+> **This is the official implementation of the paper [Demystifying the Compression of Mixture-of-Experts Through a Unified Framework](https://arxiv.org/abs/2406.02500).** We provide a comprehensive framework for compressing Mixture-of-Experts models. 
+
+
 
 ## Introduction
 
@@ -13,29 +15,38 @@ and introduce aggressive Expert Trimming techniques, such as Layer Drop and Bloc
 
 ![unified-view-table.svg](unified-view-table.svg)
 
+
+
 ## Installation
 
 #### Environment
+
+Create conda environment and install the pipeline for pruning and Expert Trimming (based on the [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory)).
 
 ```bash
 conda create -n moe-compression python=3.10
 conda activate moe-compression
 
 git clone git@github.com:DaizeDong/Unified-MoE-Compression.git
-
 cd ./Unified-MoE-Compression
 pip install -e .
 pip install flash-attn --no-build-isolation
+```
 
+Install the pipeline for quantization (based on the [AutoAWQ](https://github.com/casper-hansen/AutoAWQ) and [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ)). Ensure you carefully install the packages that correspond to your CUDA version. For more details you can refer to the README files in corresponding folders.
+
+```bash
 cd ./AutoAWQ
 pip install -e .
 
 cd ./AutoAWQ/AutoAWQ_kernels
 pip install -e .
 
-cd ../AutoGPTQ
+cd ./AutoGPTQ
 pip install -vvv --no-build-isolation -e .
 ```
+
+
 
 #### Prepare Models
 
@@ -48,6 +59,8 @@ Download the [Mixtral-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1) 
   "AutoModelForCausalLM": "modeling_deepseek.DeepseekForCausalLM"
 },
 ```
+
+
 
 ## Running Compression
 
@@ -62,29 +75,21 @@ bash scripts/compression/pruning/deepseek_prune_noshared.sh
 ```
 
 #### Quantization
-Please refer to [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ) and [AutoAWQ](https://github.com/casper-hansen/AutoAWQ). Ensure you carefully install the packages that correspond to your CUDA version.
-For quantization, use the following scripts:
+
 ```bash
 bash scripts/compression/quantization/awq.sh
 bash scripts/compression/quantization/gptq.sh
 ```
 
+
+
 ### Expert Trimming
 
 #### Expert Drop
 
-For normal `bfloat16` or `float32` models, run:
-
 ```bash
 bash scripts/compression/expert_drop/mixtral_expert_drop.sh
 bash scripts/compression/expert_drop/deepseek_expert_drop.sh
-```
-
-For quantized models, run:
-
-```bash
-bash scripts/compression/expert_drop/mixtral_expert_drop_quantized.sh
-bash scripts/compression/expert_drop/deepseek_expert_drop_quantized.sh
 ```
 
 #### Layer Drop
@@ -92,8 +97,6 @@ bash scripts/compression/expert_drop/deepseek_expert_drop_quantized.sh
 ```bash
 bash scripts/compression/layer_drop/mixtral_layer_drop.sh
 bash scripts/compression/layer_drop/deepseek_layer_drop.sh
-bash scripts/compression/layer_drop/mixtral_layer_drop_quantized.sh
-bash scripts/compression/layer_drop/deepseek_layer_drop_quantized.sh
 ```
 
 #### Block Drop
@@ -101,13 +104,13 @@ bash scripts/compression/layer_drop/deepseek_layer_drop_quantized.sh
 ```bash
 bash scripts/compression/block_drop/mixtral_block_drop.sh
 bash scripts/compression/block_drop/deepseek_block_drop.sh
-bash scripts/compression/block_drop/mixtral_block_drop_quantized.sh
-bash scripts/compression/block_drop/deepseek_block_drop_quantized.sh
 ```
+
+
 
 ## Running Evaluation
 
-#### FLOPs & Speedup
+#### FLOPs & Speed
 
 ```bash
 bash scripts/evaluation/speedup/measure_flops.sh
@@ -117,21 +120,19 @@ bash scripts/evaluation/speedup/measure_speed.sh
 #### Loss & PPL
 
 ```bash
-bash scripts/evaluate/loss/mixtral_evaluate.sh
-bash scripts/evaluate/loss/deepseek_evaluate.sh
+bash scripts/evaluation/loss/mixtral_evaluate.sh
+bash scripts/evaluation/loss/deepseek_evaluate.sh
 ```
 
 #### Benchmarks
 
-```bash
-bash scripts/evaluate/benchmark/......
-```
+Coming soon. We are still cleaning the code...
 
-TODO: Add lm-evaluation-harness here.
+Fow now please refer to [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness).
 
-Please refer to [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness).
+Remember to use the modeling files in `src/llmtuner/model` to load the [Mixtral-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1) and [DeepSeek-MoE-16B](https://huggingface.co/deepseek-ai/deepseek-moe-16b-base) models.
 
-Remember to use the modeling files in `src/llmtuner/model` to load the Mixtral and DeepSeek models.
+
 
 ## Citation
 
@@ -143,6 +144,8 @@ Remember to use the modeling files in `src/llmtuner/model` to load the Mixtral a
   year={2024}
 }
 ```
+
+
 
 ## Contact Us
 

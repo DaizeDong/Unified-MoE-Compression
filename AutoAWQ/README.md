@@ -115,7 +115,7 @@ from transformers import AutoTokenizer
 
 model_path = 'lmsys/vicuna-7b-v1.5'
 quant_path = 'vicuna-7b-v1.5-awq'
-quant_config = { "zero_point": True, "q_group_size": 128, "w_bit": 4, "version": "GEMM" }
+quant_config = {"zero_point": True, "q_group_size": 128, "w_bit": 4, "version": "GEMM"}
 
 # Load model
 model = AutoAWQForCausalLM.from_pretrained(model_path)
@@ -154,18 +154,18 @@ prompt_template = """\
 {prompt}</s>
 <|assistant|>"""
 
-prompt = "You're standing on the surface of the Earth. "\
-        "You walk one mile south, one mile west and one mile north. "\
-        "You end up exactly where you started. Where are you?"
+prompt = "You're standing on the surface of the Earth. "
+         "You walk one mile south, one mile west and one mile north. "
+         "You end up exactly where you started. Where are you?"
 
 tokens = tokenizer(
-    prompt_template.format(prompt=prompt), 
+    prompt_template.format(prompt=prompt),
     return_tensors='pt'
 ).input_ids.cuda()
 
 # Generate output
 generation_output = model.generate(
-    tokens, 
+    tokens,
     streamer=streamer,
     max_seq_len=512
 )

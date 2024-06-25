@@ -1,7 +1,7 @@
+from abc import abstractmethod
 from logging import getLogger
 
 import torch.nn as nn
-from abc import abstractmethod
 
 from .triton_utils.mixin import TritonModuleMixin
 

@@ -1,13 +1,14 @@
-import tqdm
-from awq.modules.fused.block import LlamaLikeBlock
-from awq.modules.fused.model import LlamaLikeModel
-from awq.utils.fused_utils import fuse_qkv
 from typing import List, Tuple
 
+import tqdm
 from transformers.models.stablelm import StableLmForCausalLM as OldStableLmForCausalLM
 from transformers.models.stablelm.modeling_stablelm import (
     StableLmDecoderLayer as OldStableLmDecoderLayer,
 )
+
+from awq.modules.fused.block import LlamaLikeBlock
+from awq.modules.fused.model import LlamaLikeModel
+from awq.utils.fused_utils import fuse_qkv
 from .base import BaseAWQForCausalLM
 
 

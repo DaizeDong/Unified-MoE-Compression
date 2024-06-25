@@ -1,6 +1,7 @@
-import numpy as np
 import sys
 from typing import List, Sequence
+
+import numpy as np
 
 
 def levenshtein_distance(seq1: Sequence, seq2: Sequence):

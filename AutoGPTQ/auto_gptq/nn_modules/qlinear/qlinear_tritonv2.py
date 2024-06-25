@@ -8,7 +8,6 @@ import transformers
 
 from ..triton_utils.mixin import TritonModuleMixin
 
-
 logger = getLogger(__name__)
 
 try:
@@ -16,16 +15,19 @@ try:
 except ImportError as e:
     triton_import_exception = e
 
+
     def error_raiser_triton(*args, **kwargs):
         raise ValueError(
             f"Trying to use the triton backend, but could not import triton dependencies with the following error: {triton_import_exception}"
         )
+
 
     class FakeTriton:
         def __getattr__(self, name):
             raise ImportError(
                 f"Trying to use the triton backend, but could not import triton dependencies with the following error: {triton_import_exception}"
             )
+
 
     quant_matmul_248 = error_raiser_triton
     QuantLinearFunction = FakeTriton
@@ -44,7 +46,7 @@ class QuantLinear(nn.Module, TritonModuleMixin):
     QUANT_TYPE = "tritonv2"
 
     def __init__(
-        self, bits, group_size, infeatures, outfeatures, bias, trainable=False, **kwargs
+            self, bits, group_size, infeatures, outfeatures, bias, trainable=False, **kwargs
     ):
         super().__init__()
         if bits not in [2, 4, 8]:
@@ -57,7 +59,7 @@ class QuantLinear(nn.Module, TritonModuleMixin):
         self.outfeatures = outfeatures
         self.bits = bits
         self.group_size = group_size if group_size != -1 else infeatures
-        self.maxq = 2**self.bits - 1
+        self.maxq = 2 ** self.bits - 1
 
         self.register_buffer(
             "qweight",
@@ -209,14 +211,14 @@ class QuantLinear(nn.Module, TritonModuleMixin):
         logger.info("Warming up autotune cache ...")
         with torch.no_grad():
             for m in tqdm(range(0, math.ceil(math.log2(seqlen)) + 1)):
-                m = 2**m
+                m = 2 ** m
                 for (k, n), (
-                    qweight,
-                    scales,
-                    qzeros,
-                    g_idx,
-                    bits,
-                    maxq,
+                        qweight,
+                        scales,
+                        qzeros,
+                        g_idx,
+                        bits,
+                        maxq,
                 ) in kn_values.items():
                     a = torch.randn(m, k, dtype=torch.float16, device=model.device)
                     quant_matmul_248(a, qweight, scales, qzeros, g_idx, bits, maxq)

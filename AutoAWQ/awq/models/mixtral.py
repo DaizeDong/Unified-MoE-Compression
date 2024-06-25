@@ -1,13 +1,14 @@
+from typing import List, Tuple
+
 import torch
 import tqdm
+
 from awq.modules.fused.block import MixtralBlock
 from awq.modules.fused.model import FusedMixtralModel
 from awq.modules.fused.moe import FusedSparseMoeBlock
 from awq.modules.fused.norm import FasterTransformerRMSNorm
 from awq.modules.linear import WQLinear_GEMM
 from awq.utils.fused_utils import fuse_qkv, fuse_linears
-from typing import List, Tuple
-
 from llmtuner.model.mixtral.modeling_mixtral import (
     MixtralDecoderLayer as OldMixtralDecoderLayer,
     MixtralForCausalLM as OldMixtralForCausalLM,

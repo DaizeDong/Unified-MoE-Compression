@@ -1,14 +1,15 @@
-import tqdm
-from awq.modules.fused.block import LlamaLikeBlock
-from awq.modules.fused.model import LlamaLikeModel
-from awq.modules.fused.norm import FasterTransformerRMSNorm
-from awq.utils.fused_utils import fuse_qkv
 from typing import List, Tuple
 
+import tqdm
 from transformers.models.qwen2.modeling_qwen2 import (
     Qwen2DecoderLayer as OldQwen2DecoderLayer,
     Qwen2ForCausalLM as OldQwen2ForCausalLM,
 )
+
+from awq.modules.fused.block import LlamaLikeBlock
+from awq.modules.fused.model import LlamaLikeModel
+from awq.modules.fused.norm import FasterTransformerRMSNorm
+from awq.utils.fused_utils import fuse_qkv
 from .base import BaseAWQForCausalLM
 
 

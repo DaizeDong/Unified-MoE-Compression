@@ -2,19 +2,20 @@ import logging
 import math
 import os
 import sys
+from argparse import Namespace
+from copy import deepcopy
+
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
-from argparse import Namespace
-from copy import deepcopy
 from torch import no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
-from llmtuner.train.prune.utils import prepare_calibration_input, print_gpu_memory
 from llmtuner.train.prune.io import create_dir
+from llmtuner.train.prune.utils import prepare_calibration_input, print_gpu_memory
 from llmtuner.train.prune.wrapper import HiddenStatesRecordWrapper
 
 logger = logging.getLogger(__name__)

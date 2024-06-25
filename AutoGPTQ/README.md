@@ -25,6 +25,7 @@
 ## Performance Comparison
 
 ### Inference Speed
+
 > The result is generated using [this script](examples/benchmark/generation_speed.py), batch size of input is 1, decode strategy is beam search and enforce the model to generate 512 tokens, speed metric is tokens/s (the larger, the better).
 >
 > The quantized model is loaded using the setup that can gain the fastest inference speed.
@@ -40,19 +41,19 @@
 | gpt-j 6b      | 1xRTX3060-12G | 1         | OOM   | 29.55     |
 | gpt-j 6b      | 1xRTX3060-12G | 4         | OOM   | 47.36     |
 
-
 ### Perplexity
+
 For perplexity comparison, you can turn to [here](https://github.com/qwopqwop200/GPTQ-for-LLaMa#result) and [here](https://github.com/qwopqwop200/GPTQ-for-LLaMa#gptq-vs-bitsandbytes)
 
 ## Installation
 
 AutoGPTQ is available on Linux and Windows only. You can install the latest stable release of AutoGPTQ from pip with pre-built wheels:
 
-| CUDA/ROCm version | Installation                                                                                      | Built against PyTorch |
-|-------------------|---------------------------------------------------------------------------------------------------|-----------------------|
+| CUDA/ROCm version | Installation                                                                                                             | Built against PyTorch |
+|-------------------|--------------------------------------------------------------------------------------------------------------------------|-----------------------|
 | CUDA 11.8         | `pip install auto-gptq --no-build-isolation --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/`   | 2.2.1+cu118           |
-| CUDA 12.1         | `pip install auto-gptq --no-build-isolation`                                                                            | 2.2.1+cu121           |
-| ROCm 5.7          | `pip install auto-gptq --no-build-isolation --extra-index-url https://huggingface.github.io/autogptq-index/whl/rocm573/` | 2.2.1+rocm5.7               |
+| CUDA 12.1         | `pip install auto-gptq --no-build-isolation`                                                                             | 2.2.1+cu121           |
+| ROCm 5.7          | `pip install auto-gptq --no-build-isolation --extra-index-url https://huggingface.github.io/autogptq-index/whl/rocm573/` | 2.2.1+rocm5.7         |
 
 AutoGPTQ can be installed with the Triton dependency with `pip install auto-gptq[triton] --no-build-isolation` in order to be able to use the Triton backend (currently only supports linux, no 3-bits quantization).
 
@@ -63,6 +64,7 @@ On NVIDIA systems, AutoGPTQ does not support [Maxwell or lower](https://qiita.co
 ### Install from source
 
 Clone the source code:
+
 ```bash
 git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ
 ```
@@ -70,9 +72,11 @@ git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ
 A few packages are required in order to build from source: `pip install numpy gekko pandas`.
 
 Then, install locally from source:
+
 ```bash
 pip install -vvv --no-build-isolation -e .
 ```
+
 You can set `BUILD_CUDA_EXT=0` to disable pytorch extension building, but this is **strongly discouraged** as AutoGPTQ then falls back on a slow python implementation.
 
 As a last resort, if the above command fails, you can try `python setup.py install`.
@@ -92,9 +96,11 @@ For ROCm systems, the packages `rocsparse-dev`, `hipsparse-dev`, `rocthrust-dev`
 ## Quick Tour
 
 ### Quantization and Inference
+
 > warning: this is just a showcase of the usage of basic apis in AutoGPTQ, which uses only one sample to quantize a much small model, quality of quantized model using such little samples may not good.
 
 Below is an example for the simplest use of `auto_gptq` to quantize a model and inference after quantization:
+
 ```python
 from transformers import AutoTokenizer, TextGenerationPipeline
 from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
@@ -163,6 +169,7 @@ print(pipeline("auto-gptq is")[0]["generated_text"])
 For more advanced features of model quantization, please reference to [this script](examples/quantization/quant_with_alpaca.py)
 
 ### Customize Model
+
 <details>
 
 <summary>Below is an example to extend `auto_gptq` to support `OPT` model, as you will see, it's very easy:</summary>
@@ -190,11 +197,13 @@ class OPTGPTQForCausalLM(BaseGPTQForCausalLM):
         ["fc2"]
     ]
 ```
+
 After this, you can use `OPTGPTQForCausalLM.from_pretrained` and other methods as shown in Basic.
 
 </details>
 
 ### Evaluation on Downstream Tasks
+
 You can use tasks defined in `auto_gptq.eval_tasks` to evaluate model's performance on specific down-stream task before and after quantization.
 
 The predefined tasks support all causal-language-models implemented in [🤗 transformers](https://github.com/huggingface/transformers) and in this project.
@@ -281,6 +290,7 @@ print(
 </details>
 
 ## Learn More
+
 [tutorials](docs/tutorial) provide step-by-step guidance to integrate `auto_gptq` with your own project and some best practice principles.
 
 [examples](examples/README.md) provide plenty of example scripts to use `auto_gptq` in different ways.
@@ -305,6 +315,7 @@ print(
 | falcon(RefinedWebModel/RefinedWeb) | ✅            | ✅         | ✅         | ✅             |                                                                                                 |
 
 ## Supported Evaluation Tasks
+
 Currently, `auto_gptq` supports: `LanguageModelingTask`, `SequenceClassificationTask` and `TextSummarizationTask`; more Tasks will come soon!
 
 ## Running tests
@@ -326,6 +337,7 @@ AutoGPTQ defaults to using exllamav2 int4*fp16 kernel for matrix multiplication.
 Marlin is an optimized int4 * fp16 kernel was recently proposed at https://github.com/IST-DASLab/marlin. This is integrated in AutoGPTQ when loading a model with `use_marlin=True`. This kernel is available only on devices with compute capability 8.0 or 8.6 (Ampere GPUs).
 
 ## Acknowledgement
+
 - Special thanks **Elias Frantar**, **Saleh Ashkboos**, **Torsten Hoefler** and **Dan Alistarh** for proposing **GPTQ** algorithm and open source the [code](https://github.com/IST-DASLab/gptq), and for releasing [Marlin kernel](https://github.com/IST-DASLab/marlin) for mixed precision computation.
 - Special thanks **qwopqwop200**, for code in this project that relevant to quantization are mainly referenced from [GPTQ-for-LLaMa](https://github.com/qwopqwop200/GPTQ-for-LLaMa/tree/cuda).
 - Special thanks to **turboderp**, for releasing [Exllama](https://github.com/turboderp/exllama) and [Exllama v2](https://github.com/turboderp/exllamav2) libraries with efficient mixed precision kernels.

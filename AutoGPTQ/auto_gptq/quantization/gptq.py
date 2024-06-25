@@ -1,12 +1,12 @@
-from logging import getLogger
-
 import math
 import os
 import time
+from logging import getLogger
+
 import torch
 import torch.nn as nn
-
 import transformers
+
 from .quantizer import Quantizer
 
 logger = getLogger(__name__)

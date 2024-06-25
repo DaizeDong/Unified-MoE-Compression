@@ -1,16 +1,17 @@
-import tqdm
-from awq.modules.fused.block import LlamaLikeBlock
-from awq.modules.fused.model import LlamaLikeModel
-from awq.modules.fused.norm import FasterTransformerRMSNorm
-from awq.utils.fused_utils import fuse_qkv
 from typing import List, Tuple
 
+import tqdm
 from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer as OldLlamaDecoderLayer,
 )
 from transformers.models.llava.modeling_llava import (
     LlavaForConditionalGeneration as OldLlavaForConditionalGeneration,
 )
+
+from awq.modules.fused.block import LlamaLikeBlock
+from awq.modules.fused.model import LlamaLikeModel
+from awq.modules.fused.norm import FasterTransformerRMSNorm
+from awq.utils.fused_utils import fuse_qkv
 from .base import BaseAWQForCausalLM
 
 

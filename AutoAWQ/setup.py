@@ -1,8 +1,9 @@
 import os
-import torch
 import platform
-import requests
 from pathlib import Path
+
+import requests
+import torch
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import CUDAExtension
 

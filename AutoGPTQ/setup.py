@@ -6,7 +6,6 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-
 os.environ["CC"] = "g++"
 os.environ["CXX"] = "g++"
 
@@ -35,12 +34,12 @@ common_setup_kwargs = {
     ]
 }
 
-
 PYPI_RELEASE = os.environ.get('PYPI_RELEASE', None)
 BUILD_CUDA_EXT = int(os.environ.get('BUILD_CUDA_EXT', '1')) == 1
 DISABLE_QIGEN = int(os.environ.get('DISABLE_QIGEN', '1')) == 1
 COMPILE_MARLIN = int(os.environ.get('COMPILE_MARLIN', '1')) == 1
 UNSUPPORTED_COMPUTE_CAPABILITIES = ['3.5', '3.7', '5.0', '5.2', '5.3']
+
 
 def detect_local_sm_architectures():
     """
@@ -104,7 +103,7 @@ if BUILD_CUDA_EXT:
             torch_cuda_arch_list = torch_cuda_arch_list.replace(' ', ';')
             archs = torch_cuda_arch_list.split(';')
 
-            requested_but_unsupported_archs = {arch for arch in archs if arch in UNSUPPORTED_COMPUTE_CAPABILITIES }
+            requested_but_unsupported_archs = {arch for arch in archs if arch in UNSUPPORTED_COMPUTE_CAPABILITIES}
             if len(requested_but_unsupported_archs) > 0:
                 raise ValueError(f"Trying to compile AutoGPTQ for CUDA compute capabilities {torch_cuda_arch_list}, but AutoGPTQ does not support the compute capabilities {requested_but_unsupported_archs} (AutoGPTQ requires Pascal or higher). Please fix your environment variable TORCH_CUDA_ARCH_LIST (Reference: https://github.com/pytorch/pytorch/blob/v2.2.2/setup.py#L135-L139).")
         else:
@@ -157,6 +156,7 @@ if BUILD_CUDA_EXT:
 
     if not ROCM_VERSION:
         from distutils.sysconfig import get_python_lib
+
         conda_cuda_include_dir = os.path.join(get_python_lib(), "nvidia/cuda_runtime/include")
 
         print("conda_cuda_include_dir", conda_cuda_include_dir)
@@ -188,7 +188,7 @@ if BUILD_CUDA_EXT:
                     [
                         'autogptq_extension/qigen/backend.cpp'
                     ],
-                    extra_compile_args = ["-O3", "-mavx", "-mavx2", "-mfma", "-march=native", "-ffast-math", "-ftree-vectorize", "-faligned-new", "-std=c++17", "-fopenmp", "-fno-signaling-nans", "-fno-trapping-math"]
+                    extra_compile_args=["-O3", "-mavx", "-mavx2", "-mfma", "-march=native", "-ffast-math", "-ftree-vectorize", "-faligned-new", "-std=c++17", "-fopenmp", "-fno-signaling-nans", "-fno-trapping-math"]
                 )
             )
 

@@ -1,6 +1,7 @@
 import math
-from torch import LongTensor
 from typing import Any, Dict, List, Optional
+
+from torch import LongTensor
 
 from ._base import BaseTask
 

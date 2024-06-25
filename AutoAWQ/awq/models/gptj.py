@@ -1,4 +1,5 @@
 from transformers.models.gptj.modeling_gptj import GPTJForCausalLM, GPTJBlock
+
 from .base import BaseAWQForCausalLM
 
 

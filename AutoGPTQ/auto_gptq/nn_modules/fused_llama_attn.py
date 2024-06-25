@@ -1,12 +1,13 @@
 import math
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
     apply_rotary_pos_emb,
 )
+
 from ._fused_base import FusedBaseAttentionModule
 from ..utils.import_utils import compare_pytorch_version, dynamically_import_QuantLinear
 

@@ -16,7 +16,7 @@ compress_method="block_drop"
 block_drop_method="discrete" # discrete consecutive
 drop_n=5
 
-model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########"# also support quantized models
+model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########" # also support quantized models
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 similarity_cache_file="########PATH_TO_SAVE_THE_CACHE########"
 

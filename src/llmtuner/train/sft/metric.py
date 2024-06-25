@@ -1,6 +1,7 @@
-import numpy as np
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, Sequence, Tuple, Union
+
+import numpy as np
 
 from ...extras.constants import IGNORE_INDEX
 from ...extras.packages import is_jieba_available, is_nltk_available, is_rouge_available

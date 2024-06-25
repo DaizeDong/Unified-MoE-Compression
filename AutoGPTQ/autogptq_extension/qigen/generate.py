@@ -4,8 +4,9 @@ import time
 
 import numpy as np
 import pandas as pd
-import template
 from gekko import GEKKO
+
+import template
 
 
 def mem_model(N, M, T, mu, tu, bits, l1, p, gs, verbose=False):
@@ -223,9 +224,9 @@ def block_gs(nu_iter, mu, tu, rho, packed, unroll, bits):
     # unroll = 4 # number of bcasts and unpacks
     if bits == 3:
         for j in range(0, tu, 8):
-            res += f"__m256i w0_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k3*tb/{packed}*3 + jw+{j*3}]);\n"
-            res += f"__m256i w1_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k3*tb/{packed}*3 + jw+{j*3}+8]);\n"
-            res += f"__m256i w2_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k3*tb/{packed}*3 + jw+{j*3}+16]);\n"
+            res += f"__m256i w0_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k3*tb/{packed}*3 + jw+{j * 3}]);\n"
+            res += f"__m256i w1_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k3*tb/{packed}*3 + jw+{j * 3}+8]);\n"
+            res += f"__m256i w2_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k3*tb/{packed}*3 + jw+{j * 3}+16]);\n"
 
         u = 0
         first_off = 3
@@ -237,7 +238,7 @@ def block_gs(nu_iter, mu, tu, rho, packed, unroll, bits):
                 res += f"__m256 v{i}_{u} = _mm256_set1_ps(input[(i*om+k)*mb*nb + (k3+{u})*nb + i1+{i}]);\n"
 
                 for j in range(0, tu, 8):
-                    res += f"__m256i ws{j}_10 = _mm256_srli_epi32(w0_{j}, {bits*10});\n"
+                    res += f"__m256i ws{j}_10 = _mm256_srli_epi32(w0_{j}, {bits * 10});\n"
                     res += f"__m256i temp0_{j} = _mm256_slli_epi32(w1_{j}, 2);\n"
                     res += f"temp0_{j} = _mm256_and_si256(temp0_{j}, mask);\n"
                     res += f"ws{j}_10 = _mm256_or_si256(ws{j}_10, temp0_{j});\n"
@@ -274,7 +275,7 @@ def block_gs(nu_iter, mu, tu, rho, packed, unroll, bits):
 
             for k in range(u, u + second_off):
                 for j in range(0, tu, 8):
-                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{wid}_{j}, {bits*k-wid*32-shift});\n"
+                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{wid}_{j}, {bits * k - wid * 32 - shift});\n"
 
                 for j in range(0, tu, 8):
                     res += f"__m256i wsa{j}_{k} = _mm256_and_si256(ws{j}_{k}, mask);\n"
@@ -299,7 +300,7 @@ def block_gs(nu_iter, mu, tu, rho, packed, unroll, bits):
 
             for k in range(u, u + unroll):
                 for j in range(0, tu, 8):
-                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{j}, {bits*k});\n"
+                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{j}, {bits * k});\n"
 
                 for j in range(0, tu, 8):
                     res += f"__m256i wsa{j}_{k}= _mm256_and_si256(ws{j}_{k}, mask);\n"
@@ -319,9 +320,9 @@ def block(nu_iter, mu, tu, rho, packed, unroll, bits):
     # unroll = 4 # number of bcasts and unpacks
     if bits == 3:
         for j in range(0, tu, 8):
-            res += f"__m256i w0_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k2*tb/{packed}*3 + jw+{j*3}]);\n"
-            res += f"__m256i w1_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k2*tb/{packed}*3 + jw+{j*3}+8]);\n"
-            res += f"__m256i w2_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k2*tb/{packed}*3 + jw+{j*3}+16]);\n"
+            res += f"__m256i w0_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k2*tb/{packed}*3 + jw+{j * 3}]);\n"
+            res += f"__m256i w1_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k2*tb/{packed}*3 + jw+{j * 3}+8]);\n"
+            res += f"__m256i w2_{j} = _mm256_loadu_si256((__m256i*)&W[base_W + j*m/{packed}*3 + k*mb*tb/{packed}*3 + k2*tb/{packed}*3 + jw+{j * 3}+16]);\n"
 
         u = 0
         first_off = 3
@@ -333,7 +334,7 @@ def block(nu_iter, mu, tu, rho, packed, unroll, bits):
                 res += f"__m256 v{i}_{u} = _mm256_set1_ps(input[(i*om+k)*mb*nb + (k2+{u})*nb + i1+{i}]);\n"
 
                 for j in range(0, tu, 8):
-                    res += f"__m256i ws{j}_10 = _mm256_srli_epi32(w0_{j}, {bits*10});\n"
+                    res += f"__m256i ws{j}_10 = _mm256_srli_epi32(w0_{j}, {bits * 10});\n"
                     res += f"__m256i temp0_{j} = _mm256_slli_epi32(w1_{j}, 2);\n"
                     res += f"temp0_{j} = _mm256_and_si256(temp0_{j}, mask);\n"
                     res += f"ws{j}_10 = _mm256_or_si256(ws{j}_10, temp0_{j});\n"
@@ -370,7 +371,7 @@ def block(nu_iter, mu, tu, rho, packed, unroll, bits):
 
             for k in range(u, u + second_off):
                 for j in range(0, tu, 8):
-                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{wid}_{j}, {bits*k-wid*32-shift});\n"
+                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{wid}_{j}, {bits * k - wid * 32 - shift});\n"
 
                 for j in range(0, tu, 8):
                     res += f"__m256i wsa{j}_{k} = _mm256_and_si256(ws{j}_{k}, mask);\n"
@@ -395,7 +396,7 @@ def block(nu_iter, mu, tu, rho, packed, unroll, bits):
 
             for k in range(u, u + unroll):
                 for j in range(0, tu, 8):
-                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{j}, {bits*k});\n"
+                    res += f"__m256i ws{j}_{k} = _mm256_srli_epi32(w{j}, {bits * k});\n"
 
                 for j in range(0, tu, 8):
                     res += f"__m256i wsa{j}_{k}= _mm256_and_si256(ws{j}_{k}, mask);\n"
@@ -448,23 +449,23 @@ def stores_f(nu, tu, gs=False):
 
 
 def qforward(
-    nu,
-    mu,
-    tu,
-    p,
-    unroll,
-    bits,
-    n=0,
-    m=0,
-    t=0,
-    nb=0,
-    mb=0,
-    tb=0,
-    tt=0,
-    cutoff=-1,
-    gs=False,
-    gs_val=-1,
-    module=True,
+        nu,
+        mu,
+        tu,
+        p,
+        unroll,
+        bits,
+        n=0,
+        m=0,
+        t=0,
+        nb=0,
+        mb=0,
+        tb=0,
+        tt=0,
+        cutoff=-1,
+        gs=False,
+        gs_val=-1,
+        module=True,
 ):
     assert module or (gs and gs_val != -1) or (not gs and gs_val == -1)
     if cutoff == -1:
@@ -486,7 +487,7 @@ def qforward(
         ugemm += "int j1 = 0;\n"
         if bits == 3:
             ugemm += "int jw = 0;\n"
-            ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu*3})"
+            ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu * 3})"
             ugemm += "{\n"
         else:
             ugemm += "for(; j1 < tb-tu+1; j1+=tu) {\n"
@@ -503,7 +504,7 @@ def qforward(
         ugemm += "int j1 = 0;\n"
         if bits == 3:
             ugemm += "int jw = 0;\n"
-            ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu*3})"
+            ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu * 3})"
             ugemm += "{\n"
         else:
             ugemm += "for(; j1 < tb-tu+1; j1+=tu) {\n"
@@ -549,7 +550,7 @@ int ogtt,\n"
     res += "const int on = n / nb;\n"
     res += "const int om = m / mb;\n"
 
-    mask = (2**bits) - 1
+    mask = (2 ** bits) - 1
     res += f"const __m256i mask = _mm256_set1_epi32({mask});\n"
     if bits == 3:
         res += "const __m256i mask4 = _mm256_set1_epi32(4);\n"
@@ -1030,7 +1031,7 @@ def forward_module_gs(nu, mu, tu, p, unroll, bits):
     if bits == 3:
         ugemm += "int j1 = 0;\n"
         ugemm += "int jw = 0;\n"
-        ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu*3})"
+        ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu * 3})"
         ugemm += "{\n"
     else:
         ugemm += "int j1 = 0;\n"
@@ -1073,7 +1074,7 @@ def forward_module_gs(nu, mu, tu, p, unroll, bits):
     res += "  const int on = n / nb;\n"
     res += "  const int om = m / mb;\n"
 
-    mask = (2**bits) - 1
+    mask = (2 ** bits) - 1
     res += f"const __m256i mask = _mm256_set1_epi32({mask});\n"
     if bits == 3:
         res += "const __m256i mask4 = _mm256_set1_epi32(4);\n"
@@ -1189,7 +1190,7 @@ def forward_module(nu, mu, tu, p, unroll, bits):
     ugemm = ""
     if bits == 3:
         ugemm += "int jw = 0;\n"
-        ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu*3})"
+        ugemm += f"for(; j1 < tb-tu+1; j1+=tu, jw+={tu * 3})"
         ugemm += "{\n"
     else:
         ugemm += "for(; j1 < tb-tu+1; j1+=tu) {\n"
@@ -1231,7 +1232,7 @@ const int cutoff){\n"
     res += "const int on = n / nb;\n"
     res += "const int om = m / mb;\n"
 
-    mask = (2**bits) - 1
+    mask = (2 ** bits) - 1
     res += f"const __m256i mask = _mm256_set1_epi32({mask});\n"
     if bits == 3:
         res += "const __m256i mask4 = _mm256_set1_epi32(4);\n"
@@ -1314,7 +1315,7 @@ def unpack_zeros(bits):
     res = ""
     res += f"void unpack_zeros{bits}_cpu(const int* zv, float* ov, int n, int m)"
     packed = 32 // bits
-    mask = (2**bits) - 1
+    mask = (2 ** bits) - 1
     res += "{\nconst __m256i ones = _mm256_set1_epi32(1);\n"
     res += f"const __m256i mask = _mm256_set1_epi32({mask});\n"
     if bits == 4:

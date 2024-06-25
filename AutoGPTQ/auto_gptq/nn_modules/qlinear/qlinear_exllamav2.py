@@ -1,8 +1,8 @@
 # Adapted from turboderp exllama: https://github.com/turboderp/exllamav2
 
+import math
 from logging import getLogger
 
-import math
 import torch
 import torch.nn as nn
 

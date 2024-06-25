@@ -2,17 +2,18 @@ import logging
 import math
 import os
 import sys
+from argparse import Namespace
+
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
-from argparse import Namespace
 from torch import no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
-from .utils import print_gpu_memory, prepare_calibration_input
 from .io import create_dir
+from .utils import print_gpu_memory, prepare_calibration_input
 from .wrapper import HiddenStatesRecordWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 

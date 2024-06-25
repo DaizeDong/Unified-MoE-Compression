@@ -1,12 +1,12 @@
 from collections import defaultdict
-
-import torch
 from contextlib import nullcontext
-from trl import DPOTrainer
-from trl.trainer.utils import disable_dropout_in_model
 from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple, Union
 
+import torch
 from transformers import BatchEncoding, Trainer
+from trl import DPOTrainer
+from trl.trainer.utils import disable_dropout_in_model
+
 from ...extras.constants import IGNORE_INDEX
 
 if TYPE_CHECKING:

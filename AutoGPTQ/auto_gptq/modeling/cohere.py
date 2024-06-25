@@ -2,8 +2,8 @@ from logging import getLogger
 
 from ._base import BaseGPTQForCausalLM
 
-
 logger = getLogger(__name__)
+
 
 class CohereGPTQForCausalLM(BaseGPTQForCausalLM):
     layer_type = "CohereDecoderLayer"
@@ -16,5 +16,5 @@ class CohereGPTQForCausalLM(BaseGPTQForCausalLM):
         ["mlp.down_proj"],
     ]
 
+
 __all__ = ["CohereGPTQForCausalLM"]
-    

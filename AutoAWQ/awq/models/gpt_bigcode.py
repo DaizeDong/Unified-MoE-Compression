@@ -2,6 +2,7 @@ from transformers.models.gpt_bigcode.modeling_gpt_bigcode import (
     GPTBigCodeForCausalLM,
     GPTBigCodeBlock as OldGptBigCodeBlock,
 )
+
 from .base import BaseAWQForCausalLM
 
 

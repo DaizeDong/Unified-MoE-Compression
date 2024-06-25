@@ -1,7 +1,9 @@
+from typing import Dict
+
 import torch
 import torch.nn as nn
+
 from awq.utils.packing_utils import unpack_reorder_pack
-from typing import Dict
 
 try:
     import exlv2_ext  # with CUDA kernels (AutoAWQ_kernels)

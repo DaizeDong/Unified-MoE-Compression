@@ -1,7 +1,8 @@
 import logging
+from typing import List, Union
+
 import torch
 from datasets import load_dataset
-from typing import List, Union
 
 
 def get_calib_dataset(

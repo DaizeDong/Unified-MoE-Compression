@@ -1,12 +1,13 @@
 # Inspired by: https://github.com/lvwerra/trl/blob/main/examples/research_projects/stack_llama/scripts/rl_training.py
 
 import math
-from torch.optim import AdamW
-from trl import PPOConfig
 from typing import TYPE_CHECKING, List, Optional
 
+from torch.optim import AdamW
 from transformers import DataCollatorWithPadding
 from transformers.optimization import get_scheduler
+from trl import PPOConfig
+
 from ...data import get_dataset
 from ...extras.callbacks import FixValueHeadModelCallback
 from ...extras.misc import fix_valuehead_checkpoint

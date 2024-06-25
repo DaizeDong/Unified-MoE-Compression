@@ -2,6 +2,7 @@ from transformers.models.gpt_neox.modeling_gpt_neox import (
     GPTNeoXLayer,
     GPTNeoXForCausalLM,
 )
+
 from .base import BaseAWQForCausalLM
 
 

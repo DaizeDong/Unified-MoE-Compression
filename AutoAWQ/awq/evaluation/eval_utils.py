@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
 from datasets import load_dataset
+from evaluate import load as load_metric
 from lm_eval import evaluator
 from lm_eval.tasks import initialize_tasks
 from tqdm import tqdm
-
-from evaluate import load as load_metric
 from transformers import pipeline
 from transformers.models.whisper.english_normalizer import BasicTextNormalizer
 

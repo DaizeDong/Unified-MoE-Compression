@@ -1,4 +1,3 @@
-
 import gc
 import json
 import logging
@@ -21,21 +20,21 @@ from accelerate.utils.modeling import (
 )
 from accelerate.utils.offload import offload_weight, save_offload_index
 
-
 logger = logging.getLogger(__name__)
+
 
 # TODO: Remove and use instead accelerate.utils.modeling.load_checkpoint_in_model once https://github.com/huggingface/accelerate/pull/2588 is merged & accelerate 0.29 is released.
 def load_checkpoint_in_model(
-    model: nn.Module,
-    checkpoint: Union[str, os.PathLike],
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
-    offload_folder: Optional[Union[str, os.PathLike]] = None,
-    dtype: Optional[Union[str, torch.dtype]] = None,
-    offload_state_dict: bool = False,
-    offload_buffers: bool = False,
-    keep_in_fp32_modules: List[str] = None,
-    offload_8bit_bnb: bool = False,
-    strict: bool = False,
+        model: nn.Module,
+        checkpoint: Union[str, os.PathLike],
+        device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
+        offload_folder: Optional[Union[str, os.PathLike]] = None,
+        dtype: Optional[Union[str, torch.dtype]] = None,
+        offload_state_dict: bool = False,
+        offload_buffers: bool = False,
+        keep_in_fp32_modules: List[str] = None,
+        offload_8bit_bnb: bool = False,
+        strict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are

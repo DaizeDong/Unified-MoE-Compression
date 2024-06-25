@@ -1,9 +1,9 @@
+import math
 from logging import getLogger
 
-import math
 import torch
-
 from transformers.models.llama.modeling_llama import LlamaMLP
+
 from ._fused_base import FusedBaseMLPModule
 from ..utils.import_utils import TRITON_AVAILABLE
 

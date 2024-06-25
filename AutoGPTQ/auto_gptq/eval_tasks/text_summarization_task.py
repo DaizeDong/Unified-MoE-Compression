@@ -1,8 +1,9 @@
-import rouge
-from torch import LongTensor
 from typing import Any, Dict, List, Optional
 
+import rouge
+from torch import LongTensor
 from transformers import GenerationConfig
+
 from ._base import BaseTask
 from ._utils.generation_utils import postprocess_generation_ids
 

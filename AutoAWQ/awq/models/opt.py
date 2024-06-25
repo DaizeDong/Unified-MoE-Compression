@@ -1,4 +1,5 @@
 from transformers.models.opt.modeling_opt import OPTForCausalLM, OPTDecoderLayer
+
 from .base import BaseAWQForCausalLM
 
 

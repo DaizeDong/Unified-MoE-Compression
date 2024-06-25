@@ -1,8 +1,8 @@
 from logging import getLogger
+from typing import Optional
 
 import torch
 from packaging.version import parse as parse_version
-from typing import Optional
 
 try:
     import triton  # noqa: F401

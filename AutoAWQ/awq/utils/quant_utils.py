@@ -1,5 +1,6 @@
-import torch
 from typing import List
+
+import torch
 
 Q_BITS = 4
 STORAGE_BITS = 32

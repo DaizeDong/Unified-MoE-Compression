@@ -1,9 +1,10 @@
+from typing import Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from typing import Optional, Tuple, Union
-
 from transformers.models.gptj.modeling_gptj import GPTJAttention
+
 from ._fused_base import FusedBaseAttentionModule
 from ..utils.import_utils import compare_pytorch_version, dynamically_import_QuantLinear
 

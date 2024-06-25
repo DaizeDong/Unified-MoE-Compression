@@ -1,5 +1,7 @@
 import os
+
 import torch.nn as nn
+
 from awq.modules.fused.attn import QuantAttentionFused
 
 

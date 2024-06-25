@@ -229,4 +229,3 @@ class DeepseekFuser:
             model_norm,
         )
         setattr(self.model.model, "blocks", self.model.model.blocks)
-        setattr(self.model.model, "layers", self.model.model.blocks)

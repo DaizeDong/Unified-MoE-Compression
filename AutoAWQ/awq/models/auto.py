@@ -1,9 +1,10 @@
 import logging
 import os
-from awq.models import *
-from awq.models.base import BaseAWQForCausalLM
 
 from transformers import AutoConfig
+
+from awq.models import *
+from awq.models.base import BaseAWQForCausalLM
 
 AWQ_CAUSAL_LM_MODEL_MAP = {
     "mpt": MptAWQForCausalLM,

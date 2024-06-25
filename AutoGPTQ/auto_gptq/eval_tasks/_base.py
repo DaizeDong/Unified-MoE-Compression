@@ -1,8 +1,9 @@
-import torch
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
+import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
+
 from ..modeling import BaseGPTQForCausalLM
 from ..utils.data_utils import get_dataloader
 

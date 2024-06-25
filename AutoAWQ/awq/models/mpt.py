@@ -1,4 +1,5 @@
 from transformers.models.mpt.modeling_mpt import MptBlock as OldMptBlock, MptForCausalLM
+
 from .base import BaseAWQForCausalLM
 
 

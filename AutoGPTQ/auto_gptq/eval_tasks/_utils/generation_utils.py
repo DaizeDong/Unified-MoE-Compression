@@ -1,6 +1,6 @@
-from torch import LongTensor
 from typing import List, Optional, Union
 
+from torch import LongTensor
 from transformers import PreTrainedTokenizer
 
 

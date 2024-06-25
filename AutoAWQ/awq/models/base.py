@@ -1,12 +1,29 @@
 import gc
 import json
 import os
+from typing import List, Union, Dict
+
 import torch
 import torch.nn as nn
+import transformers
 from accelerate.big_modeling import (
     init_empty_weights,
     load_checkpoint_and_dispatch,
 )
+from huggingface_hub import snapshot_download
+from safetensors.torch import save_file
+from tqdm import tqdm
+from transformers import (
+    AutoConfig,
+    PreTrainedModel,
+    PretrainedConfig,
+    AutoProcessor,
+    CLIPImageProcessor,
+    PreTrainedTokenizer,
+)
+from transformers.modeling_utils import shard_checkpoint
+from typing_extensions import Doc, Annotated
+
 from awq.models._config import AwqConfig
 from awq.modules.act import ScaledActivation
 from awq.modules.linear import (
@@ -25,22 +42,6 @@ from awq.utils.module import (
     exclude_layers_to_not_quantize,
 )
 from awq.utils.module import get_named_linears, set_op_by_name
-from huggingface_hub import snapshot_download
-from safetensors.torch import save_file
-from tqdm import tqdm
-from typing import List, Union, Dict
-from typing_extensions import Doc, Annotated
-
-import transformers
-from transformers import (
-    AutoConfig,
-    PreTrainedModel,
-    PretrainedConfig,
-    AutoProcessor,
-    CLIPImageProcessor,
-    PreTrainedTokenizer,
-)
-from transformers.modeling_utils import shard_checkpoint
 
 # Since we support different `AutoModelForxxx` from transformers
 # we need to define a custom mapping dict as below:

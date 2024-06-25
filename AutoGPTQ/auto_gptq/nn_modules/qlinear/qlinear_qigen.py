@@ -1,6 +1,6 @@
+import math
 from logging import getLogger
 
-import math
 import numpy as np
 import torch
 from gekko import GEKKO

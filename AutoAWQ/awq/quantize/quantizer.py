@@ -1,10 +1,13 @@
-from collections import defaultdict
-
 import functools
 import inspect
 import logging
+from collections import defaultdict
+from typing import Dict, List, Optional
+
 import torch
 import torch.nn as nn
+from tqdm import tqdm
+
 from awq.modules.linear import (
     WQLinear_GEMM,
     WQLinear_GEMV,
@@ -21,8 +24,6 @@ from awq.utils.module import (
     exclude_layers_to_not_quantize,
 )
 from awq.utils.utils import clear_memory, get_best_device
-from tqdm import tqdm
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

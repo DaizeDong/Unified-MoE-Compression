@@ -1,16 +1,17 @@
 import math
 import os
 import sys
-import torch
-from tqdm import tqdm
-from trl import PPOTrainer
-from trl.core import PPODecorators, logprobs_from_logits
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+import torch
+from tqdm import tqdm
 from transformers import GenerationConfig, Trainer, TrainerControl, TrainerState
 from transformers.trainer_pt_utils import remove_dummy_checkpoint
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
+from trl import PPOTrainer
+from trl.core import PPODecorators, logprobs_from_logits
+
 from .utils import dump_layernorm, get_rewards_from_server, replace_model, restore_layernorm
 from ...extras.callbacks import FixValueHeadModelCallback, LogCallback
 from ...extras.logging import get_logger

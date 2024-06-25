@@ -1,12 +1,13 @@
-import torch
 import warnings
 from contextlib import contextmanager
+from typing import List, Optional, Tuple, Union
+
+import torch
 from peft import PeftConfig, PeftModel, PeftType, get_peft_model
 from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
 from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
 from peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from peft.tuners.lora import LoraConfig, LoraLayer, LoraModel
-from typing import List, Optional, Tuple, Union
 
 from ..modeling._base import BaseGPTQForCausalLM
 from ..nn_modules.qlinear import GeneralQuantLinear

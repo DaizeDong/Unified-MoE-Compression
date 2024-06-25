@@ -1,10 +1,10 @@
 from collections import Counter
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from torch import LongTensor
-from typing import Any, Dict, List, Optional
-
 from transformers import GenerationConfig, PreTrainedTokenizer
+
 from ._base import BaseTask
 from ._utils.classification_utils import get_closest_label
 from ._utils.generation_utils import postprocess_generation_ids

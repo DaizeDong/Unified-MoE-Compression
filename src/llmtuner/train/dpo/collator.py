@@ -1,7 +1,7 @@
-import torch
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
+import torch
 from transformers import DataCollatorForSeq2Seq
 
 

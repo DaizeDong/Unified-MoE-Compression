@@ -1,7 +1,8 @@
-import torch
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+import torch
 from transformers import PreTrainedModel
+
 from .dpo import run_dpo
 from .ppo import run_ppo
 from .prune import run_prune

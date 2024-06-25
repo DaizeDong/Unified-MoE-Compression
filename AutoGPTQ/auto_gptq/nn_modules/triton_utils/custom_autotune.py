@@ -1,8 +1,9 @@
 import builtins
 import math
 import time
-import triton
 from typing import Dict
+
+import triton
 
 #  code based https://github.com/fpgaminer/GPTQ-triton
 """

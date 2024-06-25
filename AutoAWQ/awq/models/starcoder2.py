@@ -1,13 +1,14 @@
+from typing import List, Tuple
+
 import tqdm
-from awq.modules.fused.block import LlamaLikeBlock
-from awq.modules.fused.model import LlamaLikeModel
-from awq.utils.fused_utils import fuse_qkv
 from transformers.models.starcoder2.modeling_starcoder2 import (
     Starcoder2ForCausalLM as OldStarcoder2ForCausalLM,
     Starcoder2DecoderLayer as OldStarcoder2DecoderLayer,
 )
-from typing import List, Tuple
 
+from awq.modules.fused.block import LlamaLikeBlock
+from awq.modules.fused.model import LlamaLikeModel
+from awq.utils.fused_utils import fuse_qkv
 from .base import BaseAWQForCausalLM
 
 

@@ -1,10 +1,11 @@
 import logging
 import math
+
 import torch
 import torch.nn.functional as F
+import transformers
 from torch import nn as nn
 
-import transformers
 from llmtuner.model.deepseek.modeling_deepseek import MoEGate
 from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock
 

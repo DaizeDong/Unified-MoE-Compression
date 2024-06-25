@@ -1,21 +1,16 @@
 # Adapted from https://github.com/abacaj/code-eval
 
-from collections import defaultdict, Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import contextlib
 import gzip
 import io
 import itertools
 import json
 import multiprocessing
-import numpy as np
 import os
 import signal
 import tempfile
-import torch
-from datasets import load_dataset
-from tqdm import tqdm
+from collections import defaultdict, Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import (
     List,
     Union,
@@ -24,6 +19,10 @@ from typing import (
     Optional,
 )
 
+import numpy as np
+import torch
+from datasets import load_dataset
+from tqdm import tqdm
 from transformers import (
     AutoTokenizer,
     PreTrainedModel,

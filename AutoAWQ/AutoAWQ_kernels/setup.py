@@ -1,7 +1,8 @@
 import os
-import torch
 from distutils.sysconfig import get_python_lib
 from pathlib import Path
+
+import torch
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 

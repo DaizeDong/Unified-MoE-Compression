@@ -1,6 +1,7 @@
-from datasets import Features
 from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, List, Union
+
+from datasets import Features
 
 from .utils import Role
 
