@@ -5,7 +5,6 @@ from transformers import AutoTokenizer
 from transformers.integrations import is_deepspeed_zero3_enabled
 from trl import AutoModelForCausalLMWithValueHead
 
-from .adapter import init_adapter
 from .deepseek.configuration_deepseek import DeepseekConfig
 from .deepseek.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 from .mixtral.configuration_mixtral import MixtralConfig
@@ -17,7 +16,7 @@ from ..extras.misc import count_parameters, get_current_device, try_download_mod
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
-    from ..hparams import FinetuningArguments, ModelArguments
+    from ..hparams import ModelArguments
 
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)
@@ -32,7 +31,6 @@ logger = get_logger(__name__)
 
 def load_model_and_tokenizer(
         model_args: "ModelArguments",
-        finetuning_args: "FinetuningArguments",
         is_trainable: Optional[bool] = False,
         add_valuehead: Optional[bool] = False,
 ) -> Tuple["PreTrainedModel", "PreTrainedTokenizer"]:
@@ -131,8 +129,6 @@ def load_model_and_tokenizer(
 
     patch_model(model, tokenizer, model_args, is_trainable)
     register_autoclass(config, model, tokenizer)
-
-    model = init_adapter(model, model_args, finetuning_args, is_trainable)
 
     if add_valuehead:
         model: "AutoModelForCausalLMWithValueHead" = AutoModelForCausalLMWithValueHead.from_pretrained(model)

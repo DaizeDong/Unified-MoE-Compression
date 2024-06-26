@@ -123,8 +123,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
             # Forward hook for recording row importance
             def add_batch_experts(name):
                 def hook(_, input, output):
-                    wrapped_layers[name].add_batch(input[0].data, output.data, None)
-                    # wrapped_layers[name].add_batch(input[0].data, output.data, input[1].data if (len(input) >= 2 and input[1] is not None) else None)  # 🔍 input[1] is routing scores.
+                    wrapped_layers[name].add_batch(input[0].data, output.data)
 
                 return hook
 

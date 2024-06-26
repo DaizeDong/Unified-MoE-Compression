@@ -12,7 +12,7 @@ accelerate launch \
   --config_file "config/accelerate/mixtral_deepspeed.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
-  src/train_bash.py \
+  src/run_prune.py \
   --stage pt \
   --do_eval \
   --model_name_or_path ${model_name_or_path} \

@@ -31,21 +31,7 @@ class WandaWrapper:
         self.score_memery = torch.zeros((1,), device=self.device, dtype=torch.float32)  # the summation of (score ** p)
         self.p = p
 
-    def add_batch(self, input, output, routing_scores=None):
-        # 🔍 rescale inputs with scores
-        if routing_scores is not None:
-            if self.multiply_score:
-                # multiple routing_scores to inputs
-                routing_scores = (routing_scores ** (self.p / 2))  # dividing 2 as the latter "scaler_row" will calculate the squared value
-                input = input * routing_scores
-            else:
-                # add routing_scores to memory
-                # 🔍 compute scores to obtain sparse ratios.
-                self.score_memery += (routing_scores ** self.p).sum().float()  # add the token scores
-
-        self.add_batch_no_score(input, output)
-
-    def add_batch_no_score(self, input, output):
+    def add_batch(self, input, output):
         # 👆 capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
         if self.weight is None and self.layer.weight.data.shape[0] > 0:
             self.weight = self.layer.weight.data.clone().cpu()

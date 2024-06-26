@@ -1,25 +1,23 @@
 import os
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from torch.utils.data import DataLoader
-from transformers import DataCollatorForSeq2Seq, DataCollatorForLanguageModeling, DataCollatorWithPadding
+from transformers import DataCollatorForSeq2Seq, DataCollatorForLanguageModeling
 
 from .block_drop import consecutive_block_dropping, discrete_block_dropping, post_block_drop
 from .expert_drop import layerwise_pruning, global_pruning, post_experts_drop
 from .io import save_sparse_model, save_expert_dropped_config, save_block_dropped_config, save_layer_dropped_config, load_json
 from .layer_drop import discrete_layer_dropping, post_layers_drop
-from ..dpo.collator import DPODataCollatorWithPadding
-from ..rm.collator import PairwiseDataCollatorWithPadding
 from ...data import get_dataset
 from ...extras.constants import IGNORE_INDEX
 from ...model import load_model_and_tokenizer
 from ...train.prune.prune import prune_magnitude, prune_sparsegpt, prune_wanda
 
 if TYPE_CHECKING:
-    from transformers import Seq2SeqTrainingArguments, TrainerCallback
-    from ...hparams import DataArguments, FinetuningArguments, ModelArguments, PruningArguments
+    from transformers import Seq2SeqTrainingArguments
+    from ...hparams import DataArguments, ModelArguments, PruningArguments
 
 DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "expert_drop", "block_drop", "layer_drop")
 
@@ -43,9 +41,7 @@ def run_prune(
         model_args: "ModelArguments",
         data_args: "DataArguments",
         training_args: "Seq2SeqTrainingArguments",
-        finetuning_args: "FinetuningArguments",
         pruning_args: "PruningArguments",  # 🔍 for pruning
-        callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     """Workflow for pruning and decomposing."""
     # 🔍 accelerator
@@ -55,7 +51,7 @@ def run_prune(
     accelerator.print("Model Args:", model_args)
 
     # 🔍 model & tokenizer
-    model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
+    model, tokenizer = load_model_and_tokenizer(model_args, training_args.do_train)
 
     if pruning_args.compress_method == "expert_drop" and pruning_args.expert_drop_method == "post_dropping":
         assert (os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")) and (os.environ.get("ACCELERATE_USE_FSDP", "false"))
@@ -88,17 +84,8 @@ def run_prune(
                 pad_to_multiple_of=8 if tokenizer.padding_side == "right" else None,  # for shift short attention
                 label_pad_token_id=IGNORE_INDEX if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id,
             )
-        elif pruning_args.data_type == "rm":
-            data_collator = PairwiseDataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-        elif pruning_args.data_type == "ppo":
-            tokenizer.padding_side = "left"  # use left-padding in generation while using right-padding in training
-            data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-        else:  # dpo
-            data_collator = DPODataCollatorWithPadding(
-                tokenizer=tokenizer,
-                pad_to_multiple_of=8,
-                label_pad_token_id=IGNORE_INDEX if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id,
-            )
+        else:
+            raise NotImplementedError
 
         dataloader = DataLoader(dataset, batch_size=1, collate_fn=data_collator, num_workers=8)  # batch size must be 1
 

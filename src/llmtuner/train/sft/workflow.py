@@ -38,12 +38,7 @@ def run_sft(
     f.write(config_to_save)
     f.close()
 
-    model, tokenizer = load_model_and_tokenizer(model_args, finetuning_args, training_args.do_train)
-    # model.save_pretrained("/mnt/petrelfs/dongdaize.d/workspace/compression/results_sft/Mixtral-8x7B-v0.1-bits4",
-    #                         safe_serialization=True,
-    #                         # save_function=xm.save,
-    #                     )
-    # exit()
+    model, tokenizer = load_model_and_tokenizer(model_args, training_args.do_train)
     for name, params in model.named_parameters():
         if params.requires_grad:
             print(name)

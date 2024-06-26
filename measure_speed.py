@@ -107,7 +107,7 @@ def generate_hf(model: BaseAWQForCausalLM, input_ids, n_generate):
     return context_time, generate_time
 
 
-def load_model(model_path, model_type, quant_file, n_generate, batch_size, no_safetensors, pretrained, model=None):
+def load_model(model_path, model_type, quant_file, n_generate, batch_size, no_safetensors, model=None):
     print(f" -- Loading model...")
 
     if model_type == "normal":
@@ -120,45 +120,42 @@ def load_model(model_path, model_type, quant_file, n_generate, batch_size, no_sa
             torch_dtype=torch.bfloat16,
         )
 
-    elif model_type == "quantized":
-        # AWQ
-        if "AWQ" in model_path:
-            model = AutoAWQForCausalLM.from_quantized(
-                model_path, quant_file, fuse_layers=True,
-                max_seq_len=n_generate, batch_size=batch_size,
-                safetensors=not no_safetensors
-            )
-        # GPTQ
-        else:
-            quantize_config = BaseQuantizeConfig.from_pretrained(model_path)
-            inject_fused_attention = True
-            inject_fused_mlp = True
-            use_triton = True
-            use_triton = False
-            use_safetensors = True
-            model = AutoGPTQForCausalLM.from_quantized(
-                model_path,
-                # max_memory=max_memory,
-                low_cpu_mem_usage=True,
-                use_triton=use_triton,
-                inject_fused_attention=inject_fused_attention,
-                inject_fused_mlp=inject_fused_mlp,
-                use_cuda_fp16=True,
-                quantize_config=quantize_config,
-                # model_basename=model_basename,
-                use_safetensors=use_safetensors,
-                # trust_remote_code=trust_remote_code,
-                # warmup_triton=False,
-                # disable_exllama=disable_exllama,
-            )
-            setattr(model, "quant_config", quantize_config)
+    elif model_type == "quantized_awq":
+        model = AutoAWQForCausalLM.from_quantized(
+            model_path, quant_file, fuse_layers=True,
+            max_seq_len=n_generate, batch_size=batch_size,
+            safetensors=not no_safetensors
+        )
+
+    elif model_type == "quantized_gptq":
+        quantize_config = BaseQuantizeConfig.from_pretrained(model_path)
+        inject_fused_attention = True
+        inject_fused_mlp = True
+        use_triton = False
+        use_safetensors = True
+        model = AutoGPTQForCausalLM.from_quantized(
+            model_path,
+            # max_memory=max_memory,
+            low_cpu_mem_usage=True,
+            use_triton=use_triton,
+            inject_fused_attention=inject_fused_attention,
+            inject_fused_mlp=inject_fused_mlp,
+            use_cuda_fp16=True,
+            quantize_config=quantize_config,
+            # model_basename=model_basename,
+            use_safetensors=use_safetensors,
+            # trust_remote_code=trust_remote_code,
+            # warmup_triton=False,
+            # disable_exllama=disable_exllama,
+        )
+        setattr(model, "quant_config", quantize_config)
     else:
         raise ValueError(model_type)
 
     return model
 
 
-def run_round(generator, model, n_generate, input_ids, batch_size, pretrained):
+def run_round(generator, model, n_generate, input_ids, batch_size, model_type):
     model.eval()
     total_memory_used = 0
     for device in range(torch.cuda.device_count()):
@@ -203,13 +200,15 @@ def run_round(generator, model, n_generate, input_ids, batch_size, pretrained):
         prefill_tokens_per_second = 'OOM'
         decode_tokens_per_second = 'OOM'
 
-    if pretrained:
+    if model_type == "normal":
         version = "FP16"
+    elif model_type == "quantized_awq":
+        version = model.quant_config.version
+    elif model_type == "quantized_gptq":
+        version = "gptq"
     else:
-        try:
-            version = model.quant_config.version
-        except:
-            version = "gptq"
+        raise NotImplementedError
+
     return {
         "Batch Size": batch_size,
         "Prefill Length": input_ids.shape[1],
@@ -253,7 +252,6 @@ def main(args):
             settings["n_generate"],
             args.batch_size,
             args.no_safetensors,
-            args.pretrained,
             model=model,
         )
 
@@ -263,7 +261,7 @@ def main(args):
             settings["n_generate"],
             input_ids,
             args.batch_size,
-            args.pretrained
+            args.model_type
         )
 
         all_stats.append(stats)
@@ -286,13 +284,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="casperhansen/mistral-7b-instruct-v0.1-awq", help="path to the model")
-    parser.add_argument("--model_type", type=str, default="quantized", choices=["normal", "quantized"], help="Type of the model")
+    parser.add_argument("--model_type", type=str, default="quantized", choices=["normal", "quantized_awq", "quantized_gptq"], help="Type of the model")
     parser.add_argument("--save_file", type=str, default=None, help="path to save the results")
     parser.add_argument("--quant_file", type=str, default="", help="weights filename")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for cache and generation")
     parser.add_argument("--no_safetensors", default=False, action="store_true", help="Use for disabling safetensors")
     parser.add_argument("--generator", type=str, default="torch", choices=["torch", "hf"], help="weights filename")
-    parser.add_argument("--pretrained", default=False, action="store_true", help="Measure pretrained model.")
     args = parser.parse_args()
 
     main(args)
