@@ -1,0 +1,31 @@
+{
+  "lima": {
+    "file_name": "lima.json",
+    "file_sha1": "9db59f6b7007dc4b17529fc63379b9cd61640f37",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output",
+      "history": "history"
+    }
+  },
+  "c4_train": {
+    "file_name": "c4_train_part_of_0.json",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "c4_valid": {
+    "file_name": "c4_valid_part_of_0.json",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "MetaMathQA": {
+    "file_name": "MetaMathQA_part.json",
+    "columns": {
+      "prompt": "query",
+      "response": "response"
+    }
+  }
+}
