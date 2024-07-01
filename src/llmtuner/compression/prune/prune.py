@@ -3,11 +3,9 @@ import sys
 import torch
 from accelerate import Accelerator
 from tqdm import tqdm
-from transformers import MixtralPreTrainedModel
 
-from .utils import find_moe_expert_linears, prepare_calibration_input, print_gpu_memory
+from .utils import find_moe_expert_linears, prepare_calibration_input, print_gpu_memory, get_moe_model_information
 from .wrapper import WandaWrapper, SparseGPTWrapper
-from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 
 
 @torch.no_grad()
@@ -17,21 +15,10 @@ def prune_magnitude(args, model, accelerator, prune_n=0, prune_m=0):
     use_cache = unwrapped_model.config.use_cache
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
+    update_state_dict = {}  # 🔍 store the pruned parameters in CPU
 
-    # 🔍 Get MoE layer ids
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = list(range(num_layers))
-    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
-    else:
-        raise NotImplementedError
-
-    accelerator.print("moe_layer_indices", moe_layer_indices)
-
-    # 🔍 store the pruned parameters in CPU
-    update_state_dict = {}
+    # 🔍 Get MoE information
+    _, num_layers, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
     print('Starting ...')
     for i in tqdm(range(num_layers), desc="Pruning layers..."):
@@ -85,21 +72,10 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
     use_cache = unwrapped_model.config.use_cache
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
+    update_state_dict = {}  # 🔍 store the pruned parameters in CPU
 
-    # 🔍 Get MoE layer ids
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = list(range(num_layers))
-    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
-    else:
-        raise NotImplementedError
-
-    accelerator.print("moe_layer_indices", moe_layer_indices)
-
-    # 🔍 store the pruned parameters in CPU
-    update_state_dict = {}
+    # 🔍 Get MoE information
+    _, num_layers, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
@@ -217,21 +193,10 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
     use_cache = unwrapped_model.config.use_cache
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
+    update_state_dict = {}  # 🔍 store the pruned parameters in CPU
 
-    # 🔍 Get MoE layer ids
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = list(range(num_layers))
-    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
-    else:
-        raise NotImplementedError
-
-    accelerator.print("moe_layer_indices", moe_layer_indices)
-
-    # 🔍 store the pruned parameters in CPU
-    update_state_dict = {}
+    # 🔍 Get MoE information
+    _, num_layers, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍

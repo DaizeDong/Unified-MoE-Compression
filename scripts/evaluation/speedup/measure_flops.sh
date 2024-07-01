@@ -7,7 +7,7 @@ batch_size=1
 seq_len=2048
 device="cuda" # cpu cuda
 
-python measure_flops.py \
+python src/measure_flops.py \
   --model_name_or_path ${model_path} \
   --save_file ${save_file} \
   --batch_size ${batch_size} \

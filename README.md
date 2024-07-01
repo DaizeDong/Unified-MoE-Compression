@@ -85,6 +85,8 @@ bash scripts/compression/quantization/gptq.sh
 
 ### Expert Trimming
 
+> Note that the Expert Trimming methods can also be combined with each other. For example, you can apply Expert Drop after Layer Drop. This may provide better trade-off between performance and efficiency.
+
 #### Expert Drop
 
 ```bash
@@ -105,7 +107,6 @@ bash scripts/compression/layer_drop/deepseek_layer_drop.sh
 bash scripts/compression/block_drop/mixtral_block_drop.sh
 bash scripts/compression/block_drop/deepseek_block_drop.sh
 ```
-
 
 
 ## Running Evaluation
@@ -136,7 +137,7 @@ Remember to use the modeling files in `src/llmtuner/model` to load the [Mixtral-
 
 ## Others
 
-To add a dataset, please refer to [README.md](data%2FREADME.md).
+To add a dataset, please refer to the [README.md](data%2FREADME.md) in `./data`.
 
 
 

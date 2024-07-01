@@ -12,11 +12,11 @@ from torch import no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
-from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
 from llmtuner.compression.prune.io import create_dir
 from llmtuner.compression.prune.utils import prepare_calibration_input, print_gpu_memory
 from llmtuner.compression.prune.wrapper import HiddenStatesRecordWrapper
+from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
+from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
 
 logger = logging.getLogger(__name__)
 

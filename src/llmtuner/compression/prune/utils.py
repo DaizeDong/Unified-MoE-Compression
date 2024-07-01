@@ -1,9 +1,12 @@
 import torch
 from torch import nn as nn, cuda
 
+from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
+from llmtuner.model.mixtral.modeling_mixtral import MixtralPreTrainedModel
+
 
 def print_gpu_memory(accelerator):
-    if accelerator.is_local_main_process:  # 🔍
+    if accelerator.is_local_main_process:
         for i in range(cuda.device_count()):
             used_memory = cuda.memory_allocated(0) // 1024 ** 2
             print(f"GPU {i} Used Memory: {used_memory}MB")
@@ -47,34 +50,6 @@ def find_moe_expert_linears(module, exclude_names: str = None) -> dict:
                     res.pop(module_name)
                     break
     return res
-
-
-@torch.no_grad()
-def check_sparsity(model):
-    use_cache = model.config.use_cache
-    model.config.use_cache = False
-
-    layers = model.model.layers
-    count = 0
-    total_params = 0
-    for i in range(len(layers)):
-        layer = layers[i]
-        subset = find_modules(layer)
-
-        sub_count = 0
-        sub_params = 0
-        for name in subset:
-            W = subset[name].weight.data
-            count += (W == 0).sum().item()
-            total_params += W.numel()
-
-            sub_count += (W == 0).sum().item()
-            sub_params += W.numel()
-
-        print(f"layer {i} sparsity {float(sub_count) / sub_params:.6f}")
-
-    model.config.use_cache = use_cache
-    return float(count) / total_params
 
 
 @torch.no_grad()
@@ -148,3 +123,37 @@ def prepare_calibration_input(model, dataloader, num_samples=16):
     outputs = [None] * len(cache['inputs'])
 
     return cache['inputs'], outputs, cache['attention_mask'], cache['position_ids']
+
+
+def get_moe_model_information(model, accelerator=None):
+    # 🔍 Get MoE layer ids
+    if isinstance(model, MixtralPreTrainedModel):
+        num_experts = model.config.num_local_experts
+        num_layers = model.config.num_hidden_layers
+        moe_layer_indices = list(range(num_layers))
+    elif isinstance(model, DeepseekPreTrainedModel):
+        num_experts = model.config.n_routed_experts
+        num_layers = model.config.num_hidden_layers
+        moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (model.config.n_routed_experts is not None and layer_idx >= model.config.first_k_dense_replace and layer_idx % model.config.moe_layer_freq == 0)]
+    else:
+        raise NotImplementedError
+
+    # 🔍 Get valid MoE layer ids ("valid" denotes that this layer contains MoENorm & MoE)
+    if isinstance(num_experts, list):
+        valid_moe_layer_indices = [i for i in moe_layer_indices if num_experts[i] >= 0]
+    else:
+        valid_moe_layer_indices = moe_layer_indices
+
+    # Print information
+    if accelerator is None:
+        print("num_experts", num_experts)
+        print("num_layers", num_layers)
+        print("moe_layer_indices", moe_layer_indices)
+        print("valid_moe_layer_indices", valid_moe_layer_indices)
+    else:
+        accelerator.print("num_experts", num_experts)
+        accelerator.print("num_layers", num_layers)
+        accelerator.print("moe_layer_indices", moe_layer_indices)
+        accelerator.print("valid_moe_layer_indices", valid_moe_layer_indices)
+
+    return num_experts, num_layers, moe_layer_indices, valid_moe_layer_indices

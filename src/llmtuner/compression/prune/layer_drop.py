@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
 from .io import create_dir
-from .utils import print_gpu_memory, prepare_calibration_input
+from .utils import print_gpu_memory, prepare_calibration_input, get_moe_model_information
 from .wrapper import HiddenStatesRecordWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 
@@ -39,17 +39,8 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
         accelerator.print("Getting features...")
         inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
 
-        # 🔍 Get MoE layer ids
-        if isinstance(unwrapped_model, MixtralPreTrainedModel):
-            num_layers = unwrapped_model.config.num_hidden_layers
-            moe_layer_indices = list(range(num_layers))
-        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-            num_layers = unwrapped_model.config.num_hidden_layers
-            moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
-        else:
-            raise NotImplementedError
-
-        accelerator.print("moe_layer_indices", moe_layer_indices)
+        # 🔍 Get MoE information
+        _, num_layers, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
         # 🔍 Initialize the similarities.
         # Row: each layer
@@ -64,7 +55,7 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
             print_gpu_memory(accelerator)
             layer = layers[i]
 
-            if i in moe_layer_indices:
+            if i in moe_layer_indices:  # this block is MoE, not dense
                 if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
                     mlp_pre_norm = layer.post_attention_layernorm
                     mlp = layer.block_sparse_moe
@@ -105,9 +96,6 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                 else:
                     input_hidden_states = torch.cat(wrapped_mlp_pre_norm.output_hidden_states, dim=0).to(dtype).to(device)
                     output_hidden_states = torch.cat(wrapped_mlp.output_hidden_states, dim=0).to(dtype).to(device)
-                # accelerator.print('layer', i)
-                # accelerator.print('input_hidden_states', input_hidden_states)
-                # accelerator.print('output_hidden_states', output_hidden_states)
 
                 # 🔍 Calculate similarity (output+input due to residual connection)
                 cos_sim = F.cosine_similarity(input_hidden_states, output_hidden_states, dim=-1)  # (total_token_num)
@@ -117,7 +105,7 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
 
                 similarities[i] = cos_sim
 
-            else:
+            else:  # this layer is dense, not MoE
                 for j in range(num_samples):
                     outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
 
@@ -145,7 +133,6 @@ def discrete_layer_dropping(args: Namespace, model: MixtralForCausalLM, dataload
     drop_n = args.drop_n
 
     similarities = get_layer_similarities(model, dataloader, accelerator, num_samples, args.layer_drop_norm, cache_file=args.similarity_cache_file)
-
     sorted_similarities, sorted_layer_id = torch.sort(similarities, dim=0, descending=True)
 
     dropped_layer_list = sorted_layer_id[:drop_n].tolist()
@@ -157,27 +144,33 @@ def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_laye
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     layers = unwrapped_model.model.layers
 
+    # 🔍 Get MoE information
+    _, _, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
+
     num_experts = []
 
     if accelerator.is_main_process:
         for layer_id, layer in tqdm(list(enumerate(layers)), desc='Dropping MLPs...'):
-            if layer_id in reserved_layer_list:
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                    num_experts.append(unwrapped_model.config.num_local_experts[layer_id] if isinstance(unwrapped_model.config.num_local_experts, list) else unwrapped_model.config.num_local_experts)
-                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                    num_experts.append(unwrapped_model.config.n_routed_experts[layer_id] if isinstance(unwrapped_model.config.n_routed_experts, list) else unwrapped_model.config.n_routed_experts)
+            if layer_id in moe_layer_indices:  # this block is MoE, not dense
+                if layer_id in reserved_layer_list:
+                    if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
+                        num_experts.append(unwrapped_model.config.num_local_experts[layer_id] if isinstance(unwrapped_model.config.num_local_experts, list) else unwrapped_model.config.num_local_experts)
+                    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
+                        num_experts.append(unwrapped_model.config.n_routed_experts[layer_id] if isinstance(unwrapped_model.config.n_routed_experts, list) else unwrapped_model.config.n_routed_experts)
+                    else:
+                        raise NotImplementedError
                 else:
-                    raise NotImplementedError
-            else:
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                    layer.post_attention_layernorm = None
-                    layer.block_sparse_moe = None
-                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                    layer.post_attention_layernorm = None
-                    layer.mlp = None
-                else:
-                    raise NotImplementedError
-                num_experts.append(-1)  # 🔍 append -1 to mark that the layer has no MoE and Norm
+                    if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
+                        layer.post_attention_layernorm = None
+                        layer.block_sparse_moe = None
+                    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
+                        layer.post_attention_layernorm = None
+                        layer.mlp = None
+                    else:
+                        raise NotImplementedError
+                    num_experts.append(-1)  # append -1 to mark that the layer has no MoE and Norm
+            else:  # this layer is dense, not MoE
+                num_experts.append(None)
 
         if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
             unwrapped_model.config.num_local_experts = num_experts

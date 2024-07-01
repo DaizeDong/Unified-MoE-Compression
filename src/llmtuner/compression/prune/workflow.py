@@ -10,16 +10,16 @@ from .block_drop import consecutive_block_dropping, discrete_block_dropping, pos
 from .expert_drop import layerwise_pruning, global_pruning, post_experts_drop
 from .io import save_sparse_model, save_expert_dropped_config, save_block_dropped_config, save_layer_dropped_config, load_json
 from .layer_drop import discrete_layer_dropping, post_layers_drop
+from ...compression.prune.prune import prune_magnitude, prune_sparsegpt, prune_wanda
 from ...data import get_dataset
 from ...extras.constants import IGNORE_INDEX
 from ...model import load_model_and_tokenizer
-from ...compression.prune.prune import prune_magnitude, prune_sparsegpt, prune_wanda
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments
     from ...hparams import DataArguments, ModelArguments, PruningArguments
 
-DATA_AWARE_PRUNING_METHODS = ("wanda", "sparsegpt", "expert_drop", "block_drop", "layer_drop")
+DATA_AWARE_METHODS = ("wanda", "sparsegpt", "expert_drop", "block_drop", "layer_drop")
 
 EXPERT_DROP_METHODS_FUNC = {
     'layerwise_pruning': layerwise_pruning,
@@ -41,18 +41,19 @@ def run_prune(
         model_args: "ModelArguments",
         data_args: "DataArguments",
         training_args: "Seq2SeqTrainingArguments",
-        pruning_args: "PruningArguments",  # 🔍 for pruning
+        pruning_args: "PruningArguments",  # 🔍 for compression
 ):
     """Workflow for pruning and decomposing."""
     # 🔍 accelerator
     accelerator = Accelerator()
     accelerator.print(f"{AcceleratorState()}")
-    accelerator.print("Pruning Args:", pruning_args)
+    accelerator.print("Compression Args:", pruning_args)
     accelerator.print("Model Args:", model_args)
 
     # 🔍 model & tokenizer
     model, tokenizer = load_model_and_tokenizer(model_args, training_args.do_train)
 
+    # 🔍 special cases for saving models
     if pruning_args.compress_method == "expert_drop" and pruning_args.expert_drop_method == "post_dropping":
         assert (os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")) and (os.environ.get("ACCELERATE_USE_FSDP", "false"))
         config = load_json(os.path.join(pruning_args.compressed_model_save_path, "config.json"))
@@ -72,7 +73,8 @@ def run_prune(
         post_block_drop(pruning_args.compressed_model_save_path, model, tokenizer, layer_id_mapping, accelerator)
         exit()
 
-    if pruning_args.compress_method in DATA_AWARE_PRUNING_METHODS:
+    # 🔍 prepare dataset by conditions
+    if pruning_args.compress_method in DATA_AWARE_METHODS:
         # 🔍 dataset & data collator & dataloader
         dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage=pruning_args.data_type)
 
@@ -139,14 +141,12 @@ def run_prune(
 
     if pruning_args.compressed_model_save_path is not None:
         if pruning_args.compress_method == "expert_drop":
-            # 🔍 only return the idx of remaining experts.
             save_expert_dropped_config(pruning_args.compressed_model_save_path, model, tokenizer, accelerator)
         elif pruning_args.compress_method == "layer_drop":
             save_layer_dropped_config(pruning_args.compressed_model_save_path, model, tokenizer, accelerator, dropped_layer_list=dropped_layer_list)
         elif pruning_args.compress_method == "block_drop":
             save_block_dropped_config(pruning_args.compressed_model_save_path, model, tokenizer, accelerator, dropped_layer_list=dropped_layer_list)
         else:  # wanda sparsegpt
-            # 🔍 Save sparse model to disk
             save_sparse_model(pruning_args.compressed_model_save_path, model, tokenizer, accelerator, update_state_dict, check_sparsity=True)
 
     accelerator.print("All done!")

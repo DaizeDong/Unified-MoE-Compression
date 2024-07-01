@@ -21,12 +21,13 @@ class PruningArguments:
     )
     n_compression_samples: Optional[int] = field(
         default=128,
-        metadata={"help": "Number of samples for compression."},
+        metadata={"help": "Number of samples to use for compression."},
     )
-    data_type: Literal["pt", "sft", "rm", "ppo"] = field(
+    data_type: Literal["pt", "sft"] = field(
         default="sft",
-        metadata={"choices": ["pt", "sft", "rm", "ppo"],
-                  "help": "Path to save the pruned model."},
+        metadata={"choices": ["pt", "sft"],
+                  "help": "Type of the dataset. This decides the way that data are processed."
+                          "(\"pt\": truncate & no padding. \"sft\": with padding.)"},
     )
 
     # 🔍 For pruning
@@ -59,7 +60,7 @@ class PruningArguments:
     )
     reverse_drop: Optional[bool] = field(
         default=False,
-        metadata={"help": 'Whether to drop the experts with the highest score.'},
+        metadata={"help": 'Whether to drop the experts with the highest gating scores.'},
     )
     preserve_gate: Optional[bool] = field(
         default=False,

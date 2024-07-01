@@ -10,11 +10,11 @@ from transformers import GenerationConfig, LogitsProcessor, LogitsProcessorList
 
 from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
 from awq import AutoAWQForCausalLM, BaseAWQForCausalLM
+from llmtuner.compression.prune.io import create_dir
 from llmtuner.model.deepseek.configuration_deepseek import DeepseekConfig
 from llmtuner.model.deepseek.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 from llmtuner.model.mixtral.configuration_mixtral import MixtralConfig
 from llmtuner.model.mixtral.modeling_mixtral import MixtralModel, MixtralForCausalLM
-from llmtuner.compression.prune.io import create_dir
 
 AutoConfig.register("deepseek", DeepseekConfig)
 AutoModel.register(DeepseekConfig, DeepseekModel)
@@ -284,7 +284,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="casperhansen/mistral-7b-instruct-v0.1-awq", help="path to the model")
-    parser.add_argument("--model_type", type=str, default="quantized", choices=["normal", "quantized_awq", "quantized_gptq"], help="Type of the model")
+    parser.add_argument("--model_type", type=str, default="normal", choices=["normal", "quantized_awq", "quantized_gptq"], help="Type of the model")
     parser.add_argument("--save_file", type=str, default=None, help="path to save the results")
     parser.add_argument("--quant_file", type=str, default="", help="weights filename")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for cache and generation")

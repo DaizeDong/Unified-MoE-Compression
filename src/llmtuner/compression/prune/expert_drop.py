@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralPreTrainedModel
 from .io import create_dir, save_json
-from .utils import print_gpu_memory, prepare_calibration_input, find_modules
+from .utils import print_gpu_memory, prepare_calibration_input, find_modules, get_moe_model_information
 from .wrapper import MixtralExpertDropWrapper, DeepseekExpertDropWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel, MoEGate
 
@@ -36,34 +36,15 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     """
     :param num_samples: samples on each device, calculated as "num_samples = n_compression_samples // num_processes"
     """
-    device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     use_cache = unwrapped_model.config.use_cache
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
-
     if args.score_save_file is not None:
         routing_scores = []
 
-    # 🔍 Get MoE layer ids
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        num_experts = unwrapped_model.config.num_local_experts
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = list(range(num_layers))
-    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-        num_experts = unwrapped_model.config.n_routed_experts
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
-    else:
-        raise NotImplementedError
-
-    accelerator.print("moe_layer_indices", moe_layer_indices)
-
-    # 🔍 Get valid MoE layer ids
-    if isinstance(num_experts, list):
-        valid_moe_layer_indices = [i for i in moe_layer_indices if num_experts[i] >= 0]
-    else:
-        valid_moe_layer_indices = moe_layer_indices
+    # 🔍 Get MoE information
+    num_experts, num_layers, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)  # 🔍
@@ -78,87 +59,93 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         print_gpu_memory(accelerator)
         layer = layers[i]
 
-        if i in valid_moe_layer_indices:
-            this_layer_num_experts = num_experts[i] if isinstance(num_experts, list) else num_experts
+        if i in moe_layer_indices:  # this block is MoE, not dense
+            if i in valid_moe_layer_indices:  # this block contains the Norm & MoE layer
+                this_layer_num_experts = num_experts[i] if isinstance(num_experts, list) else num_experts
 
-            if this_layer_num_experts > args.r:
-                if args.r > 0:
-                    # Find modules
-                    if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                        subset = find_modules(layer, [MixtralSparseMoeBlock])
-                    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                        subset = find_modules(layer, [MoEGate])
-                    else:
-                        raise NotImplementedError
-                    # accelerator.print(subset)
-
-                    # Wrap layers
-                    wrapped_layers = {}
-                    for name in subset:
-                        if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                            wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
-                        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-                            wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
+                if this_layer_num_experts > args.r:
+                    if args.r > 0:
+                        # Find modules
+                        if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
+                            subset = find_modules(layer, [MixtralSparseMoeBlock])
+                        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
+                            subset = find_modules(layer, [MoEGate])
                         else:
                             raise NotImplementedError
+                        # accelerator.print(subset)
 
-                    # Forward hook for recording metrics
-                    def add_batch(name):
-                        def mixtral_hook(_, input, output):
-                            wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
+                        # Wrap layers
+                        wrapped_layers = {}
+                        for name in subset:
+                            if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                                wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
+                            elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                                wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
+                            else:
+                                raise NotImplementedError
 
-                        def deepseek_hook(_, input, output):
-                            wrapped_layers[name].add_batch(input[0].data, output[0].data, output[1].data)  # output[0] is topk ids, output[1] is topk scores (after softmax)
+                        # Forward hook for recording metrics
+                        def add_batch(name):
+                            def mixtral_hook(_, input, output):
+                                wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
 
-                        if isinstance(unwrapped_model, MixtralPreTrainedModel):
-                            return mixtral_hook  # 🔍
-                        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-                            return deepseek_hook  # 🔍
-                        else:
-                            raise NotImplementedError
+                            def deepseek_hook(_, input, output):
+                                wrapped_layers[name].add_batch(input[0].data, output[0].data, output[1].data)  # output[0] is topk ids, output[1] is topk scores (after softmax)
 
-                    # Get importance
-                    handles = []
-                    for name in wrapped_layers:
-                        handles.append(subset[name].register_forward_hook(add_batch(name)))
-                    for j in range(num_samples):
-                        outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
-                    for h in handles:
-                        h.remove()
+                            if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                                return mixtral_hook  # 🔍
+                            elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                                return deepseek_hook  # 🔍
+                            else:
+                                raise NotImplementedError
 
-                    # 🔍 Expert Drop
-                    for name in subset:  # should be only one element in subset
-                        module_state_dict_name = f"model.layers.{i}.{name}"
-                        accelerator.print(f"Dropping for {module_state_dict_name}")
+                        # Get importance
+                        handles = []
+                        for name in wrapped_layers:
+                            handles.append(subset[name].register_forward_hook(add_batch(name)))
+                        for j in range(num_samples):
+                            outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+                        for h in handles:
+                            h.remove()
 
-                        # 🔍 sort total scores
-                        # [IMPORTANT] all reduce across devices
-                        scores = wrapped_layers[name].scores
-                        scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
-                        accelerator.print(f"layer {i} scores: {scores}")
+                        # 🔍 Expert Drop
+                        for name in subset:  # should be only one element in subset
+                            module_state_dict_name = f"model.layers.{i}.{name}"
+                            accelerator.print(f"Dropping for {module_state_dict_name}")
 
-                        _, experts_to_drop = torch.topk(scores, this_layer_num_experts - args.r, largest=args.reverse_drop)
-                        accelerator.print("largest:", args.reverse_drop, bool(args.reverse_drop))
-                        experts_to_drop = experts_to_drop.tolist()
-                        accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
-                        experts_to_preserve = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_drop)))
-                        update_num_experts_list.append(len(experts_to_preserve))
-                        update_experts_idx.append(experts_to_preserve)
+                            # 🔍 sort total scores
+                            # [IMPORTANT] all reduce across devices
+                            scores = wrapped_layers[name].scores
+                            scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
+                            accelerator.print(f"layer {i} scores: {scores}")
 
-                        if args.score_save_file is not None:
-                            routing_scores.append(scores.float().cpu())
+                            _, experts_to_drop = torch.topk(scores, this_layer_num_experts - args.r, largest=args.reverse_drop)
+                            accelerator.print("largest:", args.reverse_drop, bool(args.reverse_drop))
+                            experts_to_drop = experts_to_drop.tolist()
+                            accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
+                            experts_to_preserve = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_drop)))
+                            update_num_experts_list.append(len(experts_to_preserve))
+                            update_experts_idx.append(experts_to_preserve)
 
-                else:  # no expert left
-                    update_num_experts_list.append(0)  # this denotes that this layer has no MoE, but has Norm
-                    update_experts_idx.append([])
+                            # 🔍 record routing scores to save
+                            if args.score_save_file is not None:
+                                routing_scores.append(scores.float().cpu())
 
-            else:  # do not drop as the remaining experts have already satisfied the requirement
-                update_num_experts_list.append(this_layer_num_experts)
-                update_experts_idx.append(list(range(this_layer_num_experts)))
+                    else:  # no expert left
+                        update_num_experts_list.append(0)  # this denotes that this layer has no MoE, but has Norm
+                        update_experts_idx.append([])
 
-        else:
-            update_num_experts_list.append(-1)  # this denotes that this layer has no MoE & Norm
-            update_experts_idx.append(None)
+                else:  # do not drop as the remaining experts have already satisfied the requirement
+                    update_num_experts_list.append(this_layer_num_experts)
+                    update_experts_idx.append(list(range(this_layer_num_experts)))
+
+            else:  # this block has no Norm & MoE
+                update_num_experts_list.append(-1)  # this denotes that this layer has no MoE & Norm
+                update_experts_idx.append(None)
+                for j in range(num_samples):
+                    outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+
+        else:  # this block is dense, not MoE
             for j in range(num_samples):
                 outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
 
@@ -168,8 +155,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     # 🔍 Fill in the missing values for non-MoE layers
     update_num_experts_list = fill_missing_values_for_non_moe_layers(update_num_experts_list, moe_layer_indices, num_layers)
     update_experts_idx = fill_missing_values_for_non_moe_layers(update_experts_idx, moe_layer_indices, num_layers)
-    accelerator.print("update_num_experts_list", update_num_experts_list)
-    accelerator.print("update_experts_idx", update_experts_idx)
+    accelerator.print("update_num_experts_list", update_num_experts_list, len(update_num_experts_list))
+    accelerator.print("update_experts_idx", update_experts_idx, len(update_experts_idx))
 
     # 🔍 Update the config
     accelerator.print("Expert dropping done!")
@@ -200,34 +187,15 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
 
 @torch.no_grad()
 def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: Accelerator, num_samples: int):
-    # device = accelerator.device
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     use_cache = unwrapped_model.config.use_cache
     unwrapped_model.config.use_cache = False
     layers = unwrapped_model.model.layers
-
     if args.score_save_file is not None:
-        warnings.warn("Recording routing scores is only supported under \"layer-wise\" mode!")
+        routing_scores = []
 
-    # 🔍 Get MoE layer ids
-    if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        num_experts = unwrapped_model.config.num_local_experts
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = list(range(num_layers))
-    elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
-        num_experts = unwrapped_model.config.n_routed_experts
-        num_layers = unwrapped_model.config.num_hidden_layers
-        moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (unwrapped_model.config.n_routed_experts is not None and layer_idx >= unwrapped_model.config.first_k_dense_replace and layer_idx % unwrapped_model.config.moe_layer_freq == 0)]
-    else:
-        raise NotImplementedError
-
-    accelerator.print("moe_layer_indices", moe_layer_indices)
-
-    # 🔍 Get valid MoE layer ids
-    if isinstance(num_experts, list):
-        valid_moe_layer_indices = [i for i in moe_layer_indices if num_experts[i] >= 0]
-    else:
-        valid_moe_layer_indices = moe_layer_indices
+    # 🔍 Get MoE information
+    num_experts, num_layers, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
     accelerator.print("Getting features...")
     inputs, outputs, attention_mask, position_ids = prepare_calibration_input(unwrapped_model, dataloader, num_samples)
@@ -296,6 +264,10 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                 global_scores.append(scores)
                 accelerator.print(f"layer {i} scores: {scores}")
 
+                # 🔍 record routing scores to save
+                if args.score_save_file is not None:
+                    routing_scores.append(scores.float().cpu())
+
         else:
             for j in range(num_samples):
                 outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
@@ -308,7 +280,7 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
 
     # 🔍 Get number of experts to drop
     if isinstance(num_experts, list):
-        total_num_experts = sum([n for n in num_experts if n is not None])
+        total_num_experts = sum([n for n in num_experts if (n is not None and n >= 0)])
     else:
         total_num_experts = num_experts * len(moe_layer_indices)
 
@@ -397,6 +369,17 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
     else:
         raise NotImplementedError
+
+    # 🔍 Save routing scores
+    if args.score_save_file is not None:
+        if isinstance(num_experts, list):
+            warnings.warn("Recording routing scores with list type \"num_experts\" is not supported!")
+        else:
+            if accelerator.is_main_process:
+                routing_scores = torch.stack(routing_scores, dim=0)
+                create_dir(os.path.dirname(args.score_save_file))
+                torch.save(routing_scores, args.score_save_file)
+            accelerator.wait_for_everyone()
 
 
 @torch.no_grad()
