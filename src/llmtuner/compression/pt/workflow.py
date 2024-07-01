@@ -5,22 +5,19 @@ from typing import TYPE_CHECKING, List, Optional
 
 from transformers import DataCollatorForLanguageModeling, Trainer
 
-from ...compression.utils import create_modelcard_and_push
 from ...data import get_dataset, split_dataset
-from ...extras.ploting import plot_loss
 from ...model import load_model_and_tokenizer
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
 
-    from ...hparams import DataArguments, FinetuningArguments, ModelArguments
+    from ...hparams import DataArguments, ModelArguments
 
 
 def run_pt(
         model_args: "ModelArguments",
         data_args: "DataArguments",
         training_args: "Seq2SeqTrainingArguments",
-        finetuning_args: "FinetuningArguments",
         callbacks: Optional[List["TrainerCallback"]] = None,
 ):
     model, tokenizer = load_model_and_tokenizer(model_args, training_args.do_train)
@@ -48,8 +45,6 @@ def run_pt(
         trainer.log_metrics("compression", train_result.metrics)
         trainer.save_metrics("compression", train_result.metrics)
         trainer.save_state()
-        if trainer.is_world_process_zero() and finetuning_args.plot_loss:
-            plot_loss(training_args.output_dir, keys=["loss", "eval_loss"])
 
     # Evaluation
     if training_args.do_eval:
@@ -62,6 +57,3 @@ def run_pt(
         metrics["perplexity"] = perplexity
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-
-    # Create model card
-    create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)
