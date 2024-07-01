@@ -11,6 +11,10 @@ class CompressionArguments:
     r"""
     Arguments about compression.
     """
+    stage: Optional[Literal["prune", "pt"]] = field(
+        default="prune",
+        metadata={"help": "Which stage will be performed."},
+    )
     compress_method: Optional[str] = field(
         default="wanda",
         metadata={"choices": ["magnitude", "wanda", "sparsegpt", "expert_drop", "block_drop", "layer_drop"]},

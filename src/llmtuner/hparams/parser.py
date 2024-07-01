@@ -1,7 +1,8 @@
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional, Tuple
+from dataclasses import field, dataclass
+from typing import Any, Dict, Optional, Tuple, Literal
 
 import datasets
 import torch
@@ -16,6 +17,7 @@ from ..extras.logging import get_logger
 from ..extras.packages import is_unsloth_available
 
 logger = get_logger(__name__)
+
 
 _COMPRESSION_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, CompressionArguments]  # 🔍
 _COMPRESSION_CLS = Tuple[ModelArguments, DataArguments, Seq2SeqTrainingArguments, CompressionArguments]  # 🔍
