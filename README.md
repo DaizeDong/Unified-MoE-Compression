@@ -127,11 +127,18 @@ bash scripts/evaluation/loss/deepseek_evaluate.sh
 
 #### Benchmarks
 
-Coming soon. We are still cleaning the code...
+You should first install the pipeline for evaluation (based on the [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)).
 
-Fow now please refer to [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness).
+```bash
+cd ./lm-evaluation-harness
+pip install -e .
+```
 
-Remember to use the modeling files in `src/llmtuner/model` to load the [Mixtral-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1) and [DeepSeek-MoE-16B](https://huggingface.co/deepseek-ai/deepseek-moe-16b-base) models.
+Then run the following script:
+
+```bash
+bash scripts/evaluation/benchmark/run_benchmark.sh
+```
 
 
 

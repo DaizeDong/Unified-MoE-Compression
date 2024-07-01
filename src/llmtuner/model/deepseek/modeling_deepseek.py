@@ -916,7 +916,7 @@ class DeepseekDecoderLayer(nn.Module):
         # 🔍
         if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0):
             if hasattr(config, "layer_experts_idx"):
-                num_experts = len(config.layer_experts_idx[layer_idx])
+                num_experts = -1 if config.layer_experts_idx[layer_idx] is None else len(config.layer_experts_idx[layer_idx])
             else:
                 num_experts = config.n_routed_experts if isinstance(config.n_routed_experts, int) else config.n_routed_experts[layer_idx]
 

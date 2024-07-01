@@ -905,7 +905,7 @@ class MixtralDecoderLayer(nn.Module):
 
         # 🔍
         if hasattr(config, "layer_experts_idx"):
-            num_experts = len(config.layer_experts_idx[layer_idx])
+            num_experts = -1 if config.layer_experts_idx[layer_idx] is None else len(config.layer_experts_idx[layer_idx])
         else:
             num_experts = config.num_local_experts if isinstance(config.num_local_experts, int) else config.num_local_experts[layer_idx]
 
