@@ -7,9 +7,9 @@ BLOCK_DROP_METHODS = ('discrete', 'consecutive', 'post_dropping')
 
 
 @dataclass
-class PruningArguments:
+class CompressionArguments:
     r"""
-    Arguments pertaining to specify the decoding parameters.
+    Arguments about compression.
     """
     compress_method: Optional[str] = field(
         default="wanda",
@@ -54,19 +54,19 @@ class PruningArguments:
         metadata={"help": ' '.join(['Supported dropping methods:'] + list(EXPERT_DROP_METHODS)),
                   "choices": EXPERT_DROP_METHODS},
     )
-    r: Optional[int] = field(
+    preserve_n: Optional[int] = field(
         default=4,
         metadata={"help": 'Number of experts to preserve'}
-    )
-    reverse_drop: Optional[bool] = field(
-        default=False,
-        metadata={"help": 'Whether to drop the experts with the highest gating scores.'},
     )
     preserve_gate: Optional[bool] = field(
         default=False,
         metadata={"help": 'Whether to preserve the dimension of the gate. (Available only in \"post_dropping\" mode) '
                           'If True, the gate weights of the corresponding experts will be re-ordered instead of being pruned. '
                           'The model will dynamically drop tokens according to the gate selections instead of redirecting to other experts.'},
+    )
+    reverse_drop: Optional[bool] = field(
+        default=False,
+        metadata={"help": 'Whether to drop the experts with the highest gating scores.'},
     )
     score_save_file: Optional[str] = field(
         default=None,

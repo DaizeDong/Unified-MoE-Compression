@@ -63,8 +63,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
             if i in valid_moe_layer_indices:  # this block contains the Norm & MoE layer
                 this_layer_num_experts = num_experts[i] if isinstance(num_experts, list) else num_experts
 
-                if this_layer_num_experts > args.r:
-                    if args.r > 0:
+                if this_layer_num_experts > args.preserve_n:
+                    if args.preserve_n > 0:
                         # Find modules
                         if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
                             subset = find_modules(layer, [MixtralSparseMoeBlock])
@@ -119,7 +119,7 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                             scores = accelerator.reduce(scores, reduction="sum")  # Here we use "sum" as the number of tokens processed by each device may be different.
                             accelerator.print(f"layer {i} scores: {scores}")
 
-                            _, experts_to_drop = torch.topk(scores, this_layer_num_experts - args.r, largest=args.reverse_drop)
+                            _, experts_to_drop = torch.topk(scores, this_layer_num_experts - args.preserve_n, largest=args.reverse_drop)
                             accelerator.print("largest:", args.reverse_drop, bool(args.reverse_drop))
                             experts_to_drop = experts_to_drop.tolist()
                             accelerator.print(f"layer {i} experts_to_drop: {experts_to_drop}")
@@ -285,7 +285,7 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         total_num_experts = num_experts * len(moe_layer_indices)
 
     avg_experts_per_moe_layer = total_num_experts / len(valid_moe_layer_indices)
-    num_experts_to_drop = round((avg_experts_per_moe_layer - args.r) * len(valid_moe_layer_indices))
+    num_experts_to_drop = round((avg_experts_per_moe_layer - args.preserve_n) * len(valid_moe_layer_indices))
 
     if num_experts_to_drop > 0:
         if num_experts_to_drop < total_num_experts:  # not all experts are dropped
@@ -396,10 +396,10 @@ def post_experts_drop(compressed_model_save_path, model, tokenizer, config, acce
             accelerator.print(f"layer {layer_id} experts_to_preserve: {experts_to_preserve}")
 
             if experts_to_preserve is not None:  # this layer is MoE
-                r = len(experts_to_preserve)
+                preserve_n = len(experts_to_preserve)
 
                 if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                    if r > 0:
+                    if preserve_n > 0:
                         # drop experts
                         layer.block_sparse_moe.experts = nn.ModuleList([layer.block_sparse_moe.experts[i] for i in experts_to_preserve])
 
@@ -409,7 +409,7 @@ def post_experts_drop(compressed_model_save_path, model, tokenizer, config, acce
 
                         if not preserve_gate:  # remove gate weights for dropped experts
                             new_gate_weight = layer.block_sparse_moe.gate.weight.data[experts_to_preserve]
-                            layer.block_sparse_moe.gate = nn.Linear(in_features=layer.block_sparse_moe.gate.in_features, out_features=r, bias=False, device=layer.block_sparse_moe.gate.weight.device, dtype=layer.block_sparse_moe.gate.weight.dtype)
+                            layer.block_sparse_moe.gate = nn.Linear(in_features=layer.block_sparse_moe.gate.in_features, out_features=preserve_n, bias=False, device=layer.block_sparse_moe.gate.weight.device, dtype=layer.block_sparse_moe.gate.weight.dtype)
                             layer.block_sparse_moe.gate.weight.data = new_gate_weight
                         else:  # re-order gate weights for all experts, the dropped weights are preserved
                             new_gate_weight = layer.block_sparse_moe.gate.weight.data[experts_to_preserve + experts_to_drop]
@@ -422,7 +422,7 @@ def post_experts_drop(compressed_model_save_path, model, tokenizer, config, acce
                         gate_num_experts.append(None)
 
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                    if r > 0:
+                    if preserve_n > 0:
                         # drop experts
                         layer.mlp.experts = nn.ModuleList([layer.mlp.experts[i] for i in experts_to_preserve])
 

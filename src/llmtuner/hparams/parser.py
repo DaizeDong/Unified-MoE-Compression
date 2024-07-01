@@ -10,29 +10,17 @@ from transformers import HfArgumentParser, Seq2SeqTrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils.versions import require_version
 
+from .compression_args import CompressionArguments
 from .data_args import DataArguments
-from .evaluation_args import EvaluationArguments
 from .finetuning_args import FinetuningArguments
-from .generating_args import GeneratingArguments
 from .model_args import ModelArguments
-from .pruning_args import PruningArguments
 from ..extras.logging import get_logger
 from ..extras.packages import is_unsloth_available
 
 logger = get_logger(__name__)
 
-_TRAIN_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, GeneratingArguments]
-_TRAIN_SPARSE_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, GeneratingArguments, PruningArguments]
-_TRAIN_CLS = Tuple[ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, GeneratingArguments]
-_TRAIN_SPARSE_CLS = Tuple[ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, GeneratingArguments, PruningArguments]
-
-_INFER_ARGS = [ModelArguments, DataArguments, FinetuningArguments, GeneratingArguments]
-_INFER_CLS = Tuple[ModelArguments, DataArguments, FinetuningArguments, GeneratingArguments]
-
-_EVAL_ARGS = [ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments]
-_EVAL_SPARSE_ARGS = [ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments, PruningArguments]
-_EVAL_CLS = Tuple[ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments]
-_EVAL_SPARSE_CLS = Tuple[ModelArguments, DataArguments, EvaluationArguments, FinetuningArguments, PruningArguments]
+_COMPRESSION_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, CompressionArguments]  # 🔍
+_COMPRESSION_CLS = Tuple[ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments,  CompressionArguments]  # 🔍
 
 
 def _check_dependencies(disabled: bool) -> None:
@@ -88,178 +76,13 @@ def _verify_model_args(model_args: "ModelArguments", finetuning_args: "Finetunin
         raise ValueError("Adapter is only valid for the LoRA method.")
 
 
-def _parse_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
-    parser = HfArgumentParser(_TRAIN_ARGS)
+def _parse_compression_args(args: Optional[Dict[str, Any]] = None) -> _COMPRESSION_CLS:
+    parser = HfArgumentParser(_COMPRESSION_ARGS)
     return _parse_args(parser, args)
 
 
-def _parse_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARSE_CLS:
-    parser = HfArgumentParser(_TRAIN_SPARSE_ARGS)
-    return _parse_args(parser, args)
-
-
-def _parse_infer_args(args: Optional[Dict[str, Any]] = None) -> _INFER_CLS:
-    parser = HfArgumentParser(_INFER_ARGS)
-    return _parse_args(parser, args)
-
-
-def _parse_eval_args(args: Optional[Dict[str, Any]] = None) -> _EVAL_CLS:
-    parser = HfArgumentParser(_EVAL_ARGS)
-    return _parse_args(parser, args)
-
-
-def _parse_eval_sparse_args(args: Optional[Dict[str, Any]] = None) -> _EVAL_SPARSE_CLS:
-    parser = HfArgumentParser(_EVAL_SPARSE_ARGS)
-    return _parse_args(parser, args)
-
-
-def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
-    model_args, data_args, training_args, finetuning_args, generating_args = _parse_train_args(args)
-
-    # Setup logging
-    if training_args.should_log:
-        _set_transformers_logging()
-
-    # Check arguments
-    if finetuning_args.stage != "pt" and data_args.template is None:
-        raise ValueError("Please specify which `template` to use.")
-
-    if finetuning_args.stage != "sft" and training_args.predict_with_generate:
-        raise ValueError("`predict_with_generate` cannot be set as True except SFT.")
-
-    if finetuning_args.stage == "sft" and training_args.do_predict and not training_args.predict_with_generate:
-        raise ValueError("Please enable `predict_with_generate` to save model predictions.")
-
-    if finetuning_args.stage in ["rm", "ppo"] and training_args.load_best_model_at_end:
-        raise ValueError("RM and PPO stages do not support `load_best_model_at_end`.")
-
-    if finetuning_args.stage == "ppo" and not training_args.do_train:
-        raise ValueError("PPO training does not support evaluation, use the SFT stage to evaluate models.")
-
-    if finetuning_args.stage == "ppo" and model_args.shift_attn:
-        raise ValueError("PPO training is incompatible with S^2-Attn.")
-
-    if finetuning_args.stage == "ppo" and finetuning_args.reward_model_type == "lora" and model_args.use_unsloth:
-        raise ValueError("Unsloth does not support lora reward model.")
-
-    if training_args.max_steps == -1 and data_args.streaming:
-        raise ValueError("Please specify `max_steps` in streaming mode.")
-
-    if training_args.do_train and training_args.predict_with_generate:
-        raise ValueError("`predict_with_generate` cannot be set as True while training.")
-
-    if (
-            training_args.do_train
-            and finetuning_args.finetuning_type == "freeze"
-            and finetuning_args.name_module_trainable is None
-    ):
-        raise ValueError("Please specify `name_module_trainable` in Freeze training.")
-
-    if training_args.do_train and finetuning_args.finetuning_type == "lora" and finetuning_args.lora_target is None:
-        raise ValueError("Please specify `lora_target` in LoRA training.")
-
-    if training_args.do_train and model_args.use_unsloth and not is_unsloth_available:
-        raise ValueError("Install Unsloth: https://github.com/unslothai/unsloth")
-
-    _verify_model_args(model_args, finetuning_args)
-    _check_dependencies(disabled=finetuning_args.disable_version_checking)
-
-    if (
-            training_args.do_train
-            and finetuning_args.finetuning_type == "lora"
-            and model_args.resize_vocab
-            and finetuning_args.additional_target is None
-    ):
-        logger.warning("Add token embeddings to `additional_target` to make the added tokens trainable.")
-
-    if training_args.do_train and model_args.quantization_bit is not None and (not model_args.upcast_layernorm):
-        logger.warning("We recommend enable `upcast_layernorm` in quantized training.")
-
-    if training_args.do_train and (not training_args.fp16) and (not training_args.bf16):
-        logger.warning("We recommend enable mixed precision training.")
-
-    if (not training_args.do_train) and model_args.quantization_bit is not None:
-        logger.warning("Evaluating model in 4/8-bit mode may cause lower scores.")
-
-    if (not training_args.do_train) and finetuning_args.stage == "dpo" and finetuning_args.ref_model is None:
-        logger.warning("Specify `ref_model` for computing rewards at evaluation.")
-
-    # Post-process training arguments
-    if (
-            training_args.local_rank != -1
-            and training_args.ddp_find_unused_parameters is None
-            and finetuning_args.finetuning_type == "lora"
-    ):
-        logger.warning("`ddp_find_unused_parameters` needs to be set as False for LoRA in DDP training.")
-        training_args_dict = training_args.to_dict()
-        training_args_dict.update(dict(ddp_find_unused_parameters=False))
-        training_args = Seq2SeqTrainingArguments(**training_args_dict)
-
-    if finetuning_args.stage in ["rm", "ppo"] and finetuning_args.finetuning_type in ["full", "freeze"]:
-        can_resume_from_checkpoint = False
-        if training_args.resume_from_checkpoint is not None:
-            logger.warning("Cannot resume from checkpoint in current stage.")
-            training_args.resume_from_checkpoint = None
-    else:
-        can_resume_from_checkpoint = True
-
-    if (
-            training_args.resume_from_checkpoint is None
-            and training_args.do_train
-            and os.path.isdir(training_args.output_dir)
-            and not training_args.overwrite_output_dir
-            and can_resume_from_checkpoint
-    ):
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError("Output directory already exists and is not empty. Please set `overwrite_output_dir`.")
-
-        if last_checkpoint is not None:
-            training_args_dict = training_args.to_dict()
-            training_args_dict.update(dict(resume_from_checkpoint=last_checkpoint))
-            training_args = Seq2SeqTrainingArguments(**training_args_dict)
-            logger.info(
-                "Resuming training from {}. Change `output_dir` or use `overwrite_output_dir` to avoid.".format(
-                    training_args.resume_from_checkpoint
-                )
-            )
-
-    if (
-            finetuning_args.stage in ["rm", "ppo"]
-            and finetuning_args.finetuning_type == "lora"
-            and training_args.resume_from_checkpoint is not None
-    ):
-        logger.warning(
-            "Add {} to `adapter_name_or_path` to resume training from checkpoint.".format(
-                training_args.resume_from_checkpoint
-            )
-        )
-
-    # Post-process model arguments
-    model_args.compute_dtype = (
-        torch.bfloat16 if training_args.bf16 else (torch.float16 if training_args.fp16 else None)
-    )
-    model_args.model_max_length = data_args.cutoff_len
-
-    # Log on each process the small summary:
-    logger.info(
-        "Process rank: {}, device: {}, n_gpu: {}\n  distributed training: {}, compute dtype: {}".format(
-            training_args.local_rank,
-            training_args.device,
-            training_args.n_gpu,
-            bool(training_args.local_rank != -1),
-            str(model_args.compute_dtype),
-        )
-    )
-    logger.info(f"Training/evaluation parameters {training_args}")
-
-    transformers.set_seed(training_args.seed)
-
-    return model_args, data_args, training_args, finetuning_args, generating_args
-
-
-def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARSE_CLS:
-    model_args, data_args, training_args, finetuning_args, generating_args, pruning_args = _parse_train_sparse_args(args)
+def get_compression_args(args: Optional[Dict[str, Any]] = None) -> _COMPRESSION_CLS:
+    model_args, data_args, training_args, finetuning_args,  compression_args = _parse_compression_args(args)
 
     # Setup logging
     if training_args.should_log:
@@ -400,47 +223,4 @@ def get_train_sparse_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_SPARS
 
     transformers.set_seed(training_args.seed)
 
-    return model_args, data_args, training_args, finetuning_args, generating_args, pruning_args
-
-
-def get_infer_args(args: Optional[Dict[str, Any]] = None) -> _INFER_CLS:
-    model_args, data_args, finetuning_args, generating_args = _parse_infer_args(args)
-
-    _set_transformers_logging()
-    _verify_model_args(model_args, finetuning_args)
-    _check_dependencies(disabled=finetuning_args.disable_version_checking)
-
-    if data_args.template is None:
-        raise ValueError("Please specify which `template` to use.")
-
-    return model_args, data_args, finetuning_args, generating_args
-
-
-def get_eval_args(args: Optional[Dict[str, Any]] = None) -> _EVAL_CLS:
-    model_args, data_args, eval_args, finetuning_args = _parse_eval_args(args)
-
-    _set_transformers_logging()
-    _verify_model_args(model_args, finetuning_args)
-    _check_dependencies(disabled=finetuning_args.disable_version_checking)
-
-    if data_args.template is None:
-        raise ValueError("Please specify which `template` to use.")
-
-    transformers.set_seed(eval_args.seed)
-
-    return model_args, data_args, eval_args, finetuning_args
-
-
-def get_eval_sparse_args(args: Optional[Dict[str, Any]] = None) -> _EVAL_SPARSE_CLS:
-    model_args, data_args, eval_args, finetuning_args, pruning_args = _parse_eval_sparse_args(args)
-
-    _set_transformers_logging()
-    _verify_model_args(model_args, finetuning_args)
-    _check_dependencies(disabled=finetuning_args.disable_version_checking)
-
-    if data_args.template is None:
-        raise ValueError("Please specify which `template` to use.")
-
-    transformers.set_seed(eval_args.seed)
-
-    return model_args, data_args, eval_args, finetuning_args, pruning_args
+    return model_args, data_args, training_args, finetuning_args, compression_args
