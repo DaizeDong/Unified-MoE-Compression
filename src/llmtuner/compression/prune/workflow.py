@@ -36,7 +36,7 @@ BLOCK_DROP_METHODS_FUNC = {
 }
 
 
-# 🔍 Modified from src.llmtuner.train.pt.workflow.run_pt
+# 🔍 Modified from src.llmtuner.compression.pt.workflow.run_pt
 def run_prune(
         model_args: "ModelArguments",
         data_args: "DataArguments",
