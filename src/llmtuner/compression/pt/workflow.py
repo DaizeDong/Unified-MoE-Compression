@@ -8,7 +8,7 @@ from transformers import DataCollatorForLanguageModeling, Trainer
 from ...data import get_dataset, split_dataset
 from ...extras.ploting import plot_loss
 from ...model import load_model_and_tokenizer
-from ...train.utils import create_modelcard_and_push
+from ...compression.utils import create_modelcard_and_push
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback

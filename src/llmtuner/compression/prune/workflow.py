@@ -13,7 +13,7 @@ from .layer_drop import discrete_layer_dropping, post_layers_drop
 from ...data import get_dataset
 from ...extras.constants import IGNORE_INDEX
 from ...model import load_model_and_tokenizer
-from ...train.prune.prune import prune_magnitude, prune_sparsegpt, prune_wanda
+from ...compression.prune.prune import prune_magnitude, prune_sparsegpt, prune_wanda
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments

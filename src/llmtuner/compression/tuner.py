@@ -5,7 +5,6 @@ from transformers import PreTrainedModel
 
 from .prune import run_prune
 from .pt import run_pt
-from .sft import run_sft
 from ..extras.callbacks import LogCallback
 from ..extras.logging import get_logger
 from ..hparams import get_infer_args, get_train_sparse_args
@@ -23,8 +22,6 @@ def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["Tra
 
     if finetuning_args.stage == "pt":
         run_pt(model_args, data_args, training_args, finetuning_args, callbacks)
-    elif finetuning_args.stage == "sft":
-        run_sft(model_args, data_args, training_args, finetuning_args, generating_args, callbacks)
     elif finetuning_args.stage == "prune":  # 🔍
         run_prune(model_args, data_args, training_args, pruning_args)
     else:
