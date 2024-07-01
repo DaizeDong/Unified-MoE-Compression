@@ -7,6 +7,7 @@ model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########"
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 
 dataset="c4_valid"
+#dataset="c4_valid_full" # please download the full validation data before using this
 
 accelerate launch \
   --config_file "config/accelerate/mixtral_deepspeed.yaml" \

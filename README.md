@@ -134,6 +134,12 @@ Remember to use the modeling files in `src/llmtuner/model` to load the [Mixtral-
 
 
 
+## Others
+
+To add a dataset, please refer to [README.md](data%2FREADME.md).
+
+
+
 ## Citation
 
 ```latex

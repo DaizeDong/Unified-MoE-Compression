@@ -8,6 +8,7 @@ output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 use_fast_tokenizer="True"
 
 dataset="c4_valid"
+#dataset="c4_valid_full" # please download the full validation data before using this
 
 accelerate launch \
   --config_file "config/accelerate/deepseek_normal.yaml" \
