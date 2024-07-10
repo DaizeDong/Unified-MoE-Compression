@@ -15,21 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class WandaWrapper:
-    def __init__(self, layer, layer_id=0, layer_name="none", multiply_score=True, p=2):
+    def __init__(self, layer, layer_name="none"):
         self.layer = layer
-        self.layer_id = layer_id
         self.layer_name = layer_name
         self.device = self.layer.weight.device
-        # print(layer_name, layer.weight.data.shape)
 
         self.scaler_row = None  # importance for each row
         self.weight = None  # 👆 record weight
         self.nsamples = 0
-
-        # 🔍 for dynamic sparsity using scores
-        self.multiply_score = multiply_score
-        self.score_memery = torch.zeros((1,), device=self.device, dtype=torch.float32)  # the summation of (score ** p)
-        self.p = p
 
     def add_batch(self, input, output):
         # 👆 capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
@@ -117,19 +110,6 @@ class HiddenStatesRecordWrapper:
             self.input_hidden_states.append(input.squeeze(0).clone().cpu())
         if self.record_output:
             self.output_hidden_states.append(output.squeeze(0).clone().cpu())
-
-
-class WeightRecordWrapper:
-    def __init__(self, layer, layer_name="none"):
-        self.layer = layer
-        self.layer_name = layer_name
-        self.weight = None
-
-    def record(self, input, output):
-        if self.weight is None and self.layer.weight.data.shape[0] > 0:
-            # capture the intact weights when possible!!!!!!!!!!!!!!!!!!!!!!
-            self.weight = self.layer.weight.data.clone().cpu()
-            # print(f"record {self.layer_name}, {self.weight.data.shape}")
 
 
 """For expert drop"""

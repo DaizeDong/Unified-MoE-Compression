@@ -94,7 +94,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
             # Wrap layers
             wrapped_layers = {}
             for name in subset_experts:
-                wrapped_layers[name] = WandaWrapper(subset_experts[name], layer_name=name, multiply_score=False, p=1)  # 🔍
+                wrapped_layers[name] = WandaWrapper(subset_experts[name], layer_name=name)  # 🔍
 
             # Forward hook for recording row importance
             def add_batch_experts(name):
@@ -116,7 +116,7 @@ def prune_wanda(args, model, dataloader, accelerator: Accelerator, num_samples, 
             for name in subset_experts:  # 🔍semi-structured
                 module_state_dict_name = f"model.layers.{i}.{name}"
                 accelerator.print(f"Pruning module {module_state_dict_name}")
-                W = wrapped_layers[name].weight.data.to(device)  # 👆 use the captured weights
+                W = wrapped_layers[name].weight.data.to(device)  # 👆 use the captured weights. (WHY: Weights are displayed on different devices and cannot be correctly accessed when using DeepSpeed)
                 W_metric = (torch.abs(W) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))).float()
                 W_metric = accelerator.reduce(W_metric, reduction="sum")  # 🔍 all reduce across devices
                 W_mask = torch.zeros_like(W_metric)  # initialize a mask to be all 0
@@ -237,7 +237,7 @@ def prune_sparsegpt(args, model, dataloader, accelerator: Accelerator, num_sampl
                 module_state_dict_name = f"model.layers.{i}.{name}"
                 accelerator.print(f"Pruning module {module_state_dict_name}")
 
-                W = wrapped_layers[name].weight.data.to(device).float()  # 👆 use the captured weights
+                W = wrapped_layers[name].weight.data.to(device).float()  # 👆 use the captured weights (WHY: Weights are displayed on different devices and cannot be correctly accessed when using DeepSpeed)
                 H = wrapped_layers[name].H
                 H = accelerator.reduce(H, reduction="mean")  # 🔍 all reduce across devices
 
