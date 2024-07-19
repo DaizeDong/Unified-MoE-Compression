@@ -21,7 +21,7 @@ preserve_n=6                        # 8 7 6 5 4 3 2 1 0
 model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########" # also support quantized models
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 
-output_dir="${output_dir}/DeepSeek-${compress_method}-${expert_drop_method}-r${preserve_n}-${dataset}${n_compression_samples}samples"
+output_dir="${output_dir}/Mixtral-${compress_method}-${expert_drop_method}-r${preserve_n}-${dataset}${n_compression_samples}samples"
 compressed_model_save_path=${output_dir}/checkpoint
 
 accelerate launch \
