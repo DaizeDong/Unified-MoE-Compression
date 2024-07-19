@@ -178,9 +178,9 @@ def post_block_drop(compressed_model_save_path, model, tokenizer, layer_id_mappi
                     accelerator.print(state_name, "-->", state_name)
                     break
 
-        accelerator.print("Keys in save_state_dict:")
-        for key in save_state_dict.keys():
-            accelerator.print(key)
+        # accelerator.print("Keys in save_state_dict:")
+        # for key in save_state_dict.keys():
+        #     accelerator.print(key)
 
         # 🔍 initialize a new model and save
         accelerator.print("Initializing the new model...")

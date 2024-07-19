@@ -27,8 +27,8 @@ else
     num_fewshot=${num_fewshot_list[i]}
     echo "${task_name}: ${num_fewshot} shot"
 
-    save_path="${save_path}/${task_name}-${num_fewshot}shot"
-    mkdir -p ${save_path}
+    this_save_path="${save_path}/${task_name}-${num_fewshot}shot"
+    mkdir -p ${this_save_path}
 
     lm_eval \
       --model hf \
@@ -36,6 +36,6 @@ else
       --tasks ${task_name} \
       --num_fewshot ${num_fewshot} \
       --batch_size ${batch_size} \
-      --output_path ${save_path}
+      --output_path ${this_save_path}
   done
 fi
