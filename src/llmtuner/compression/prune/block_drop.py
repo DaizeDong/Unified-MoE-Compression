@@ -15,7 +15,7 @@ from tqdm import tqdm
 from llmtuner.compression.prune.io import create_dir
 from llmtuner.compression.prune.utils import prepare_calibration_input, print_gpu_memory
 from llmtuner.compression.prune.wrapper import HiddenStatesRecordWrapper
-from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
+from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel, DeepseekForCausalLM
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
 
 logger = logging.getLogger(__name__)
@@ -193,21 +193,25 @@ def post_block_drop(compressed_model_save_path, model, tokenizer, layer_id_mappi
         accelerator.print("preserved_layers", preserved_layers)
 
         if isinstance(model, MixtralPreTrainedModel):
-            if hasattr(new_config, "layer_experts_idx"):
+            if hasattr(new_config, "layer_experts_idx"):  # for compatibility with Expert Drop
                 new_config.layer_experts_idx = [model.config.layer_experts_idx[i] for i in preserved_layers]
-            if isinstance(new_config.num_local_experts, list):
+            if isinstance(new_config.num_local_experts, list):  # for compatibility with Expert Drop & Layer Drop
                 new_config.num_local_experts = [model.config.num_local_experts[i] for i in preserved_layers]
+            new_model = MixtralForCausalLM(config=new_config)
 
         elif isinstance(model, DeepseekPreTrainedModel):
-            if hasattr(new_config, "layer_experts_idx"):
+            if hasattr(new_config, "layer_experts_idx"):  # for compatibility with Expert Drop
                 new_config.layer_experts_idx = [model.config.layer_experts_idx[i] for i in preserved_layers]
-            if isinstance(new_config.n_routed_experts, list):
+            if isinstance(new_config.n_routed_experts, list):  # for compatibility with Expert Drop & Layer Drop
                 new_config.n_routed_experts = [model.config.n_routed_experts[i] for i in preserved_layers]
+            new_model = DeepseekForCausalLM(config=new_config)
+
+        else:
+            raise NotImplementedError
+
         accelerator.print("new_config", new_config)
 
         # Model
-        new_model = model
-        new_model.model.layers = model.model.layers[:len(preserved_layers)]  # reduce the number of layers
         new_model.load_state_dict(save_state_dict, strict=True)  # update the layer parameters
         if not hasattr(new_model, "quantization_config"):
             new_model.bfloat16()

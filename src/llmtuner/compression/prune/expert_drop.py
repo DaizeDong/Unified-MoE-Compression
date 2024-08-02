@@ -417,7 +417,7 @@ def post_experts_drop(compressed_model_save_path, model, tokenizer, config, acce
 
                         gate_num_experts.append(this_layer_num_experts)
 
-                    else:
+                    else:  # no expert in this layer
                         layer.block_sparse_moe = None
                         gate_num_experts.append(None)
 
@@ -439,7 +439,7 @@ def post_experts_drop(compressed_model_save_path, model, tokenizer, config, acce
 
                         gate_num_experts.append(this_layer_num_experts)
 
-                    else:
+                    else:  # no expert in this layer
                         layer.mlp = None
                         gate_num_experts.append(None)
 

@@ -27,6 +27,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import (
@@ -47,7 +48,6 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-
 from .configuration_deepseek import DeepseekConfig
 
 if is_flash_attn_2_available():
@@ -245,14 +245,13 @@ class DeepseekMLP(nn.Module):
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
 
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)  # 🔍
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)  # 🔍
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)  # 🔍
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         if self.config.pretraining_tp > 1:
-            # 🔍 TODO: tp support
             slice = self.intermediate_size // self.config.pretraining_tp
             gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
             up_proj_slices = self.up_proj.weight.split(slice, dim=0)
@@ -389,8 +388,10 @@ class DeepseekMoE(nn.Module):
             hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
             y = torch.empty_like(hidden_states)
             for i, expert in enumerate(self.experts):
+                # 🔍 pre-calculate the mask & indices to speedup
                 select_mask = (flat_topk_idx == i)
-                y[select_mask] = expert(hidden_states[select_mask], topk_weight[select_mask])  # 🔍
+                indices = select_mask.nonzero().view(-1)
+                y[indices] = expert(hidden_states[indices])
             y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
             y = y.view(*orig_shape)
             y = AddAuxiliaryLoss.apply(y, aux_loss)
@@ -927,11 +928,7 @@ class DeepseekDecoderLayer(nn.Module):
                 self.mlp = None
                 self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
             else:
-                mode = getattr(config, "mode", "static")
-                if mode == "static":
-                    self.mlp = DeepseekMoE(config, layer_idx=layer_idx)
-                elif mode == "dynamic":
-                    raise NotImplementedError
+                self.mlp = DeepseekMoE(config, layer_idx=layer_idx)
                 self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         else:
             self.mlp = DeepseekMLP(config)

@@ -169,6 +169,10 @@ def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_laye
                     else:
                         raise NotImplementedError
                     num_experts.append(-1)  # append -1 to mark that the layer has no MoE and Norm
+
+                    if hasattr(unwrapped_model.config, "layer_experts_idx"):  # for compatibility with Expert Drop
+                        unwrapped_model.config.layer_experts_idx[layer_id] = None
+
             else:  # this layer is dense, not MoE
                 num_experts.append(None)
 
