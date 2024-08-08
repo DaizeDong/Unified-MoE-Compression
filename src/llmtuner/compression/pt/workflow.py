@@ -10,7 +10,6 @@ from ...model import load_model_and_tokenizer
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
-
     from ...hparams import DataArguments, ModelArguments
 
 

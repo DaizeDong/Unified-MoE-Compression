@@ -1,4 +1,8 @@
 {
+  "alpaca_gpt4_en": {
+    "file_name": "alpaca_gpt4_data_en.json",
+    "file_sha1": "647f4ad447bd993e4b6b6223d1be15208bab694a"
+  },
   "lima": {
     "file_name": "lima.json",
     "file_sha1": "9db59f6b7007dc4b17529fc63379b9cd61640f37",

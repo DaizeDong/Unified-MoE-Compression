@@ -226,9 +226,9 @@ def main(args):
         {"context": 128, "n_generate": 128},
         {"context": 256, "n_generate": 256},
         {"context": 512, "n_generate": 512},
-        # {"context": 1024, "n_generate": 1024},
-        # {"context": 2048, "n_generate": 2048},
-        # {"context": 4096, "n_generate": 4096},
+        {"context": 1024, "n_generate": 1024},
+        {"context": 2048, "n_generate": 2048},
+        {"context": 4096, "n_generate": 4096},
     ]
 
     if args.generator == "torch":

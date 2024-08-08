@@ -1,26 +1,25 @@
 import logging
 import os
 import sys
-from dataclasses import field, dataclass
-from typing import Any, Dict, Optional, Tuple, Literal
+from typing import Any, Dict, Optional, Tuple
 
 import datasets
 import torch
+
 import transformers
 from transformers import HfArgumentParser, Seq2SeqTrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
-
 from .compression_args import CompressionArguments
 from .data_args import DataArguments
+from .finetuning_args import FinetuningArguments
 from .model_args import ModelArguments
 from ..extras.logging import get_logger
 from ..extras.packages import is_unsloth_available
 
 logger = get_logger(__name__)
 
-
-_COMPRESSION_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, CompressionArguments]  # 🔍
-_COMPRESSION_CLS = Tuple[ModelArguments, DataArguments, Seq2SeqTrainingArguments, CompressionArguments]  # 🔍
+_COMPRESSION_ARGS = [ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, CompressionArguments]  # 🔍
+_COMPRESSION_CLS = Tuple[ModelArguments, DataArguments, Seq2SeqTrainingArguments, FinetuningArguments, CompressionArguments]  # 🔍
 
 
 def _parse_args(parser: "HfArgumentParser", args: Optional[Dict[str, Any]] = None) -> Tuple[Any]:
@@ -55,25 +54,64 @@ def _parse_compression_args(args: Optional[Dict[str, Any]] = None) -> _COMPRESSI
     return _parse_args(parser, args)
 
 
+def _verify_model_args(model_args: "ModelArguments", finetuning_args: "FinetuningArguments") -> None:
+    if model_args.quantization_bit is not None:
+        if finetuning_args.finetuning_type != "lora":
+            raise ValueError("Quantization is only compatible with the LoRA method.")
+
+        if model_args.adapter_name_or_path is not None and finetuning_args.create_new_adapter:
+            raise ValueError("Cannot create new adapter upon a quantized model.")
+
+        if model_args.adapter_name_or_path is not None and len(model_args.adapter_name_or_path) != 1:
+            raise ValueError("Quantized model only accepts a single adapter. Merge them first.")
+
+    if model_args.adapter_name_or_path is not None and finetuning_args.finetuning_type != "lora":
+        raise ValueError("Adapter is only valid for the LoRA method.")
+
+
 def get_compression_args(args: Optional[Dict[str, Any]] = None) -> _COMPRESSION_CLS:
-    model_args, data_args, training_args, compression_args = _parse_compression_args(args)
+    model_args, data_args, training_args, finetuning_args, compression_args = _parse_compression_args(args)
 
     # Setup logging
     if training_args.should_log:
         _set_transformers_logging()
 
     # Check arguments
+    if compression_args.stage == "sft" and data_args.template is None:
+        raise ValueError("Please specify which `template` to use.")
+
+    if compression_args.stage != "sft" and training_args.predict_with_generate:
+        raise ValueError("`predict_with_generate` cannot be set as True except SFT.")
+
+    if compression_args.stage == "sft" and training_args.do_predict and not training_args.predict_with_generate:
+        raise ValueError("Please enable `predict_with_generate` to save model predictions.")
+
     if training_args.max_steps == -1 and data_args.streaming:
         raise ValueError("Please specify `max_steps` in streaming mode.")
 
     if training_args.do_train and training_args.predict_with_generate:
         raise ValueError("`predict_with_generate` cannot be set as True while training.")
 
+    if training_args.do_train and finetuning_args.finetuning_type == "freeze" and finetuning_args.name_module_trainable is None:
+        raise ValueError("Please specify `name_module_trainable` in Freeze training.")
+
+    if training_args.do_train and finetuning_args.finetuning_type == "lora" and finetuning_args.lora_target is None:
+        raise ValueError("Please specify `lora_target` in LoRA training.")
+
     if training_args.do_train and model_args.use_unsloth and not is_unsloth_available:
         raise ValueError("Install Unsloth: https://github.com/unslothai/unsloth")
 
+    _verify_model_args(model_args, finetuning_args)
+
     if training_args.do_train and model_args.quantization_bit is not None and (not model_args.upcast_layernorm):
         logger.warning("We recommend enable `upcast_layernorm` in quantized training.")
+
+    # Post-process training arguments
+    if training_args.local_rank != -1 and training_args.ddp_find_unused_parameters is None and finetuning_args.finetuning_type == "lora":
+        logger.warning("`ddp_find_unused_parameters` needs to be set as False for LoRA in DDP training.")
+        training_args_dict = training_args.to_dict()
+        training_args_dict.update(dict(ddp_find_unused_parameters=False))
+        training_args = Seq2SeqTrainingArguments(**training_args_dict)
 
     if training_args.do_train and (not training_args.fp16) and (not training_args.bf16):
         logger.warning("We recommend enable mixed precision training.")
@@ -125,4 +163,4 @@ def get_compression_args(args: Optional[Dict[str, Any]] = None) -> _COMPRESSION_
 
     transformers.set_seed(training_args.seed)
 
-    return model_args, data_args, training_args, compression_args
+    return model_args, data_args, training_args, finetuning_args, compression_args

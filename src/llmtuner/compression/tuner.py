@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from llmtuner.compression.sft import run_sft
 from .prune import run_prune
 from .pt import run_pt
 from ..extras.callbacks import LogCallback
@@ -13,11 +14,13 @@ logger = get_logger(__name__)
 
 
 def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: Optional[List["TrainerCallback"]] = None):
-    model_args, data_args, training_args, compression_args = get_compression_args(args)
+    model_args, data_args, training_args,finetuning_args, compression_args = get_compression_args(args)
     callbacks = [LogCallback()] if callbacks is None else callbacks
 
     if compression_args.stage == "pt":
         run_pt(model_args, data_args, training_args, callbacks)
+    elif compression_args.stage == "sft":
+        run_sft(model_args, data_args, training_args, finetuning_args, callbacks)
     elif compression_args.stage == "prune":  # 🔍
         run_prune(model_args, data_args, training_args, compression_args)
     else:

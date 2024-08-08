@@ -11,7 +11,7 @@ class CompressionArguments:
     r"""
     Arguments about compression.
     """
-    stage: Optional[Literal["prune", "pt"]] = field(
+    stage: Optional[Literal["prune", "pt", "sft"]] = field(
         default="prune",
         metadata={"help": "Which stage will be performed."},
     )

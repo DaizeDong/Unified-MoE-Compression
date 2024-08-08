@@ -54,6 +54,7 @@ def run_prune(
     model, tokenizer = load_model_and_tokenizer(model_args, training_args.do_train)
 
     # 🔍 special cases for saving models
+    # We need another run to save models because modifying models in DeepSpeed environment is gruelling!
     if compression_args.compress_method == "expert_drop" and compression_args.expert_drop_method == "post_dropping":
         assert (os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")) and (os.environ.get("ACCELERATE_USE_FSDP", "false"))
         config = load_json(os.path.join(compression_args.compressed_model_save_path, "config.json"))

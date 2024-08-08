@@ -109,6 +109,17 @@ bash scripts/compression/block_drop/deepseek_block_drop.sh
 ```
 
 
+
+## Running Post-Finetuning
+
+We provide an example script for finetuning the DeepSeek-MoE-16B model. Just run:
+
+```bash
+bash scripts/finetuning/deepseek_finetune.sh
+```
+
+
+
 ## Running Evaluation
 
 #### FLOPs & Speed
