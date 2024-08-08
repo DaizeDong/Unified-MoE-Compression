@@ -5,7 +5,7 @@ save_file="########PATH_TO_SAVE_THE_RESULTS########/flops.txt"
 
 batch_size=1
 seq_len=2048
-device="cuda" # cpu cuda
+device="cpu" # cpu cuda
 
 python src/measure_flops.py \
   --model_name_or_path ${model_path} \

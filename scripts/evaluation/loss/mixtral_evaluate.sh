@@ -10,7 +10,7 @@ dataset="c4_valid"
 #dataset="c4_valid_full" # please download the full validation data before using this
 
 accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/mixtral_deepspeed_zero3.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   src/run_compress.py \

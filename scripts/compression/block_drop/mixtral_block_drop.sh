@@ -25,7 +25,7 @@ similarity_cache_file="${similarity_cache_file}/Mixtral-${compress_method}-${dat
 compressed_model_save_path=${output_dir}/checkpoint
 
 accelerate launch \
-  --config_file "config/accelerate/mixtral_deepspeed.yaml" \
+  --config_file "config/accelerate/mixtral_deepspeed_zero3.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \
   src/run_compress.py \

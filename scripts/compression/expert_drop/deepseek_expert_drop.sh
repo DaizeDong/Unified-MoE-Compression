@@ -16,7 +16,7 @@ compress_method="expert_drop"
 expert_drop_method="global_pruning" # layerwise_pruning global_pruning
 reverse_drop="False"                # False True
 preserve_gate="False"               # False True
-preserve_n=48                       # 64 60 56 48 44 40 36 32 28 24 20 16 12 8 4 0
+preserve_n=48                       # 64 60 56 52 48 44 40 36 32 28 24 20 16 12 8 4 0
 
 model_name_or_path="########PATH_TO_HUGGING_FACE_CHECKPOINT#########" # also support quantized models
 output_dir="########PATH_TO_SAVE_THE_RESULTS########"
