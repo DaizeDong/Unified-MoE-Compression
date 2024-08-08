@@ -142,6 +142,8 @@ class BaseAWQForCausalLM(nn.Module):
                     "Whether to apply clipping to the model during quantization. Some models may perform better with this set to False."
                 ),
             ] = True,
+            n_samples=128,  # 🔍
+            seqlen=512,  # 🔍
     ):
         """
         The main quantization function that you can use to quantize your model.
@@ -182,6 +184,9 @@ class BaseAWQForCausalLM(nn.Module):
             modules_to_not_convert=self.quant_config.modules_to_not_convert,
             export_compatible=export_compatible,
             apply_clip=apply_clip,
+            n_samples=n_samples,  # 🔍
+            seqlen=seqlen,  # 🔍
+
         )
         self.quantizer.quantize()
 

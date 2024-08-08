@@ -77,7 +77,9 @@ class DeepseekAWQForCausalLM(BaseAWQForCausalLM):
                     )
                 )
 
-        if isinstance(module.mlp, DeepseekMoE):  # MoE
+        if module.mlp is None:  # Dropped
+            pass
+        elif isinstance(module.mlp, DeepseekMoE):  # MoE
             # linear in
             shared_experts_in = [module.mlp.shared_experts.gate_proj, module.mlp.shared_experts.up_proj] \
                 if module.mlp.config.n_shared_experts is not None else []
@@ -89,7 +91,7 @@ class DeepseekAWQForCausalLM(BaseAWQForCausalLM):
                                for expert in module.mlp.experts
                                for w in [expert.gate_proj, expert.up_proj]
                            ] + shared_experts_in,
-                    inp=input_feat["mlp"],
+                    inp=input_feat["mlp"],  # TODO: it may be better to use the specific inputs routed to each expert, instead of all inputs sent to the MoE
                     module2inspect=module.mlp,
                 )
             )

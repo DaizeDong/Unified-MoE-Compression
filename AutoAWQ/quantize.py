@@ -21,6 +21,8 @@ AutoModelForCausalLM.register(MixtralConfig, MixtralForCausalLM, exist_ok=True)
 model_path = sys.argv[1]
 quant_path = sys.argv[2]
 bits = sys.argv[3]
+n_samples = int(sys.argv[4]) if len(sys.argv) >= 4 else 128
+seqlen = int(sys.argv[5]) if len(sys.argv) >= 5 else 512
 
 if "deepseek" in model_path.lower():
     q_group_size = 64
@@ -54,7 +56,7 @@ except:
     )
 
 # Quantize
-model.quantize(tokenizer, quant_config=quant_config)
+model.quantize(tokenizer, quant_config=quant_config, n_samples=n_samples, seqlen=seqlen)  # 🔍
 
 # Save quantized model
 model.save_quantized(quant_path)

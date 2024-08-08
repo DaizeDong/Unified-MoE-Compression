@@ -75,8 +75,15 @@ class FusedDeepseekMoEBlock(torch.nn.Module):
             self.top_k,
             renormalize=True,
         )
-        # add shared part. 
+        # print("hidden_states", hidden_states.shape)
+        # print("final_hidden_states", final_hidden_states.shape)
+        # print("shared_experts_output", self.shared_experts(identity).shape)
+
+        # add shared part.
+        # TODO: this part in the released version may have bugs, which causes the output incorrect.
+        # TODO: further check needed
         if self.shared_experts is not None:
+            final_hidden_states = final_hidden_states.reshape(identity.shape)
             final_hidden_states = final_hidden_states + self.shared_experts(identity)
         return final_hidden_states.view(batch_size, sequence_length, hidden_dim)
 

@@ -45,6 +45,8 @@ class AwqQuantizer:
             modules_to_not_convert=None,
             export_compatible=False,
             apply_clip=True,
+            n_samples=128,  # 🔍
+            seqlen=512,  # 🔍
     ) -> None:
         self.awq_model = awq_model
         self.model = model
@@ -62,7 +64,7 @@ class AwqQuantizer:
         self.modules_to_not_convert = (
             modules_to_not_convert if modules_to_not_convert is not None else []
         )
-        self.modules, self.module_kwargs, self.inps = self.init_quant()
+        self.modules, self.module_kwargs, self.inps = self.init_quant(n_samples=n_samples, seqlen=seqlen)  # 🔍
 
     def pseudo_quantize_tensor(self, w: torch.Tensor):
         org_w_shape = w.shape
@@ -524,17 +526,21 @@ class AwqQuantizer:
         input_feat = defaultdict(list)
         handles = []
 
+        # 🔍 adjust the modules to capture hidden features
         # FIXME: Workaround for Mixtral to use block_sparse_moe input features
         if self.awq_model.model_type == "mixtral":
-            named_linears = {
-                **named_linears,
-                "block_sparse_moe": layer.block_sparse_moe,
-            }
+            if layer.block_sparse_moe is not None:  # not layer-dropped
+                named_linears = {
+                    **named_linears,
+                    "block_sparse_moe": layer.block_sparse_moe,
+                }
         elif self.awq_model.model_type == "deepseek":
-            named_linears = {
-                **named_linears,
-                "mlp": layer.mlp,
-            }
+            if layer.mlp is not None:  # not layer-dropped
+                named_linears = {
+                    **named_linears,
+                    "mlp": layer.mlp,
+                }
+
         for name in named_linears:
             handles.append(
                 named_linears[name].register_forward_hook(
