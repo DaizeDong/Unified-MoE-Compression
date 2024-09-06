@@ -16,6 +16,7 @@ from .io import create_dir
 from .utils import print_gpu_memory, prepare_calibration_input, get_moe_model_information
 from .wrapper import HiddenStatesRecordWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
+from ...model.qwen.modeling_qwen2_moe import Qwen2MoePreTrainedModel
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,9 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                     mlp_pre_norm = layer.post_attention_layernorm
                     mlp = layer.mlp
+                elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):  # 🔍
+                    mlp_pre_norm = layer.post_attention_layernorm
+                    mlp = layer.mlp 
                 else:
                     raise NotImplementedError
 
@@ -99,7 +103,7 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
 
                 # 🔍 Calculate similarity (output+input due to residual connection)
                 cos_sim = F.cosine_similarity(input_hidden_states, output_hidden_states, dim=-1)  # (total_token_num)
-                cos_sim = cos_sim.mean()
+                cos_sim = cos_sim.mean().abs() # 🔍 for non-norm
                 cos_sim = accelerator.reduce(cos_sim, reduction="mean")  # 🔍 All reduce across devices
                 accelerator.print(f'layer {i} similarity: {cos_sim.item()}')
 
@@ -144,6 +148,7 @@ def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_laye
     unwrapped_model = accelerator.unwrap_model(model)  # 🔍 unwrap model first
     layers = unwrapped_model.model.layers
 
+
     # 🔍 Get MoE information
     _, _, moe_layer_indices, valid_moe_layer_indices = get_moe_model_information(unwrapped_model, accelerator)
 
@@ -157,6 +162,8 @@ def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_laye
                         num_experts.append(unwrapped_model.config.num_local_experts[layer_id] if isinstance(unwrapped_model.config.num_local_experts, list) else unwrapped_model.config.num_local_experts)
                     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
                         num_experts.append(unwrapped_model.config.n_routed_experts[layer_id] if isinstance(unwrapped_model.config.n_routed_experts, list) else unwrapped_model.config.n_routed_experts)
+                    elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):  # 🔍
+                        num_experts.append(unwrapped_model.config.num_experts[layer_id] if isinstance(unwrapped_model.config.num_experts, list) else unwrapped_model.config.num_experts)                    
                     else:
                         raise NotImplementedError
                 else:
@@ -164,6 +171,9 @@ def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_laye
                         layer.post_attention_layernorm = None
                         layer.block_sparse_moe = None
                     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
+                        layer.post_attention_layernorm = None
+                        layer.mlp = None
+                    elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):  # 🔍
                         layer.post_attention_layernorm = None
                         layer.mlp = None
                     else:
@@ -180,6 +190,8 @@ def post_layers_drop(compressed_model_save_path, model, tokenizer, reserved_laye
             unwrapped_model.config.num_local_experts = num_experts
         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
             unwrapped_model.config.n_routed_experts = num_experts
+        elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):  # 🔍
+            unwrapped_model.config.num_experts = num_experts
         else:
             raise NotImplementedError
 

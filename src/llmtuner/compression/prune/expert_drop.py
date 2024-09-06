@@ -10,11 +10,12 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralPreTrainedModel
+from llmtuner.model.mixtral.modeling_mixtral import MixtralPreTrainedModel, MixtralSparseMoeBlock
 from .io import create_dir, save_json
 from .utils import print_gpu_memory, prepare_calibration_input, find_modules, get_moe_model_information
-from .wrapper import MixtralExpertDropWrapper, DeepseekExpertDropWrapper
+from .wrapper import MixtralExpertDropWrapper, DeepseekExpertDropWrapper, QwenExpertDropWrapper
 from ...model.deepseek.modeling_deepseek import DeepseekPreTrainedModel, MoEGate
+from ...model.qwen.modeling_qwen2_moe import Qwen2MoePreTrainedModel, Qwen2MoeSparseMoeBlock
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,12 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                 if this_layer_num_experts > args.preserve_n:
                     if args.preserve_n > 0:
                         # Find modules
-                        if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                            subset = find_modules(layer, [MixtralSparseMoeBlock])
-                        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                            subset = find_modules(layer, [MoEGate])
+                        if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                            subset = find_modules(layer, [MixtralSparseMoeBlock])  # 🔍
+                        elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                            subset = find_modules(layer, [MoEGate])  # 🔍
+                        elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+                            subset = find_modules(layer, [Qwen2MoeSparseMoeBlock])  # 🔍
                         else:
                             raise NotImplementedError
                         # accelerator.print(subset)
@@ -81,6 +84,8 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                                 wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
                             elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
                                 wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
+                            elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+                                wrapped_layers[name] = QwenExpertDropWrapper(subset[name])  # 🔍
                             else:
                                 raise NotImplementedError
 
@@ -92,10 +97,15 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
                             def deepseek_hook(_, input, output):
                                 wrapped_layers[name].add_batch(input[0].data, output[0].data, output[1].data)  # output[0] is topk ids, output[1] is topk scores (after softmax)
 
+                            def qwen_hook(_, input, output):
+                                wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
+
                             if isinstance(unwrapped_model, MixtralPreTrainedModel):
                                 return mixtral_hook  # 🔍
                             elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
                                 return deepseek_hook  # 🔍
+                            elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+                                return qwen_hook  # 🔍
                             else:
                                 raise NotImplementedError
 
@@ -163,12 +173,15 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
     unwrapped_model.config.use_cache = use_cache
     torch.cuda.empty_cache()
 
+    accelerator.print("Updating model config...")
     if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        accelerator.print("Updating model config...")
         setattr(unwrapped_model.config, "num_local_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
+        setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
+    elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+        setattr(unwrapped_model.config, "num_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
     else:
         raise NotImplementedError
@@ -211,20 +224,24 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
 
         if i in valid_moe_layer_indices:
             # Find modules
-            if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                subset = find_modules(layer, [MixtralSparseMoeBlock])
-            elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                subset = find_modules(layer, [MoEGate])
+            if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                subset = find_modules(layer, [MixtralSparseMoeBlock])  # 🔍
+            elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                subset = find_modules(layer, [MoEGate])  # 🔍
+            elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+                subset = find_modules(layer, [Qwen2MoeSparseMoeBlock])  # 🔍
             else:
                 raise NotImplementedError
 
             # Wrap layers
             wrapped_layers = {}
             for name in subset:
-                if isinstance(unwrapped_model, MixtralPreTrainedModel):  # 🔍
-                    wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])
-                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
-                    wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])
+                if isinstance(unwrapped_model, MixtralPreTrainedModel):
+                    wrapped_layers[name] = MixtralExpertDropWrapper(subset[name])  # 🔍
+                elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+                    wrapped_layers[name] = DeepseekExpertDropWrapper(subset[name])  # 🔍
+                elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+                    wrapped_layers[name] = QwenExpertDropWrapper(subset[name])  # 🔍
                 else:
                     raise NotImplementedError
 
@@ -236,10 +253,15 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
                 def deepseek_hook(_, input, output):
                     wrapped_layers[name].add_batch(input[0].data, output[0].data, output[1].data)  # output[0] is topk ids, output[1] is topk scores (after softmax)
 
+                def qwen_hook(_, input, output):
+                    wrapped_layers[name].add_batch(input[0].data, output[1].data)  # output[1] is router_logits (before softmax)
+
                 if isinstance(unwrapped_model, MixtralPreTrainedModel):
                     return mixtral_hook  # 🔍
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
                     return deepseek_hook  # 🔍
+                elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+                    return qwen_hook  # 🔍
                 else:
                     raise NotImplementedError
 
@@ -360,12 +382,15 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
     unwrapped_model.config.use_cache = use_cache
     torch.cuda.empty_cache()
 
+    accelerator.print("Updating model config...")
     if isinstance(unwrapped_model, MixtralPreTrainedModel):
-        accelerator.print("Updating model config...")
         setattr(unwrapped_model.config, "num_local_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
     elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
         setattr(unwrapped_model.config, "n_routed_experts", update_num_experts_list)
+        setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
+    elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
+        setattr(unwrapped_model.config, "num_experts", update_num_experts_list)
         setattr(unwrapped_model.config, "layer_experts_idx", update_experts_idx)
     else:
         raise NotImplementedError
@@ -422,6 +447,28 @@ def post_experts_drop(compressed_model_save_path, model, tokenizer, config, acce
                         gate_num_experts.append(None)
 
                 elif isinstance(unwrapped_model, DeepseekPreTrainedModel):  # 🔍
+                    if preserve_n > 0:
+                        # drop experts
+                        layer.mlp.experts = nn.ModuleList([layer.mlp.experts[i] for i in experts_to_preserve])
+
+                        # rewrite gate
+                        this_layer_num_experts = layer.mlp.gate.weight.data.shape[0]
+                        experts_to_drop = sorted(list(set(range(this_layer_num_experts)) - set(experts_to_preserve)))
+
+                        if not preserve_gate:  # remove gate weights for dropped experts
+                            new_gate_weight = layer.mlp.gate.weight.data[experts_to_preserve]
+                            layer.mlp.gate.weight.data = new_gate_weight
+                        else:  # re-order gate weights for all experts, the dropped weights are preserved
+                            new_gate_weight = layer.mlp.gate.weight.data[experts_to_preserve + experts_to_drop]
+                            layer.mlp.gate.weight.data = new_gate_weight
+
+                        gate_num_experts.append(this_layer_num_experts)
+
+                    else:  # no expert in this layer
+                        layer.mlp = None
+                        gate_num_experts.append(None)
+
+                elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):  # 🔍
                     if preserve_n > 0:
                         # drop experts
                         layer.mlp.experts = nn.ModuleList([layer.mlp.experts[i] for i in experts_to_preserve])

@@ -10,6 +10,10 @@ from .deepseek.configuration_deepseek import DeepseekConfig
 from .deepseek.modeling_deepseek import DeepseekModel, DeepseekForCausalLM
 from .mixtral.configuration_mixtral import MixtralConfig
 from .mixtral.modeling_mixtral import MixtralModel, MixtralForCausalLM
+from .qwen.configuration_qwen2_moe import Qwen2MoeConfig
+from .qwen.modeling_qwen2_moe import Qwen2MoeModel, Qwen2MoeForCausalLM
+
+
 from .patcher import patch_config, patch_model, patch_tokenizer, patch_valuehead_model
 from .utils import load_valuehead_params, register_autoclass
 from ..extras.logging import get_logger
@@ -27,6 +31,10 @@ AutoModelForCausalLM.register(DeepseekConfig, DeepseekForCausalLM)
 AutoConfig.register("mixtral", MixtralConfig, exist_ok=True)
 AutoModel.register(MixtralConfig, MixtralModel, exist_ok=True)
 AutoModelForCausalLM.register(MixtralConfig, MixtralForCausalLM, exist_ok=True)
+
+AutoConfig.register("qwen2_moe", Qwen2MoeConfig)
+AutoModel.register(Qwen2MoeConfig, Qwen2MoeModel)
+AutoModelForCausalLM.register(Qwen2MoeConfig, Qwen2MoeForCausalLM)
 
 logger = get_logger(__name__)
 

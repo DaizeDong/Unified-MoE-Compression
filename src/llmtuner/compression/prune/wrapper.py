@@ -4,7 +4,7 @@ import math
 import torch
 import torch.nn.functional as F
 import transformers
-from torch import nn as nn
+from torch import nn
 
 from llmtuner.model.deepseek.modeling_deepseek import MoEGate
 from llmtuner.model.mixtral.modeling_mixtral import MixtralSparseMoeBlock
@@ -121,7 +121,6 @@ class MixtralExpertDropWrapper:
         self.scores = None
         self.nsamples = 0
         self.top_k = layer.top_k
-        self.ana_list = []
 
     def add_batch(self, input, router_logits):
         if len(input.shape) == 2:
@@ -129,31 +128,20 @@ class MixtralExpertDropWrapper:
         else:
             batch_size = input.shape[0]
 
+        # Get selection mask
+        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
+        topk_logits, topk_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        mask = torch.zeros_like(router_logits, device=router_logits.device).scatter_(dim=-1, index=topk_indices, value=1)
+
         # Record scores
-        routing_weights = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        mask = torch.zeros_like(router_logits, device=router_logits.device)
-        mask.scatter_(-1, selected_experts, 1)
-        # print(f"routing_weights: {routing_weights}")
-
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        # routing_weights = routing_weights * mask
+        routing_weights = routing_weights * mask  # using mask to filter selected experts so that the order of weights doesn't change
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # print(f"routing_weights: {routing_weights}")
-
-        for j in range(len(routing_weights)):
-            sorted_weights, sort_indices = torch.sort(routing_weights[j], descending=True)
-            self.ana_list.append(float(sorted_weights[1] / sorted_weights[0]))
-
-        # The above code is reshaping the `router_logits` array into a 2D array with a shape of
-        # `(batch_size * seq_len, n_experts)`. This means that it is rearranging the elements of the
-        # `router_logits` array into a new shape where the first dimension is the product of
-        # `batch_size` and `seq_len`, and the second dimension is `n_experts`.
-        # print("routing_weights", routing_weights.shape)
 
         if self.scores is None:
             self.nsamples += batch_size
             self.scores = routing_weights.float().sum(0) / self.nsamples
-
         else:
             self.scores *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
             self.nsamples += batch_size
@@ -179,6 +167,42 @@ class DeepseekExpertDropWrapper:
 
         routing_weights = torch.zeros((topk_weight.shape[0], self.n_routed_experts), device=topk_weight.device, dtype=topk_weight.dtype)
         routing_weights = torch.scatter(routing_weights, dim=1, index=topk_idx, src=topk_weight)
+
+        if self.scores is None:
+            self.nsamples += batch_size
+            self.scores = routing_weights.float().sum(0) / self.nsamples
+        else:
+            self.scores *= self.nsamples / (self.nsamples + batch_size)  # shrink old mean values
+            self.nsamples += batch_size
+            self.scores += routing_weights.float().sum(0) / self.nsamples  # update mean values by adding values from new samples
+
+
+class QwenExpertDropWrapper:
+    def __init__(self, layer: nn.Linear):
+        self.layer = layer
+        self.scores = None
+        self.nsamples = 0
+        self.num_experts = layer.num_experts
+        self.top_k = layer.top_k
+        self.norm_topk_prob = layer.norm_topk_prob
+
+    def add_batch(self, input, router_logits):
+        if len(input.shape) == 2:
+            batch_size = 1
+        else:
+            batch_size = input.shape[0]
+
+        # Get selection mask
+        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
+        topk_logits, topk_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        mask = torch.zeros_like(router_logits, device=router_logits.device).scatter_(dim=-1, index=topk_indices, value=1)
+
+        # Record scores
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights = routing_weights * mask  # using mask to filter selected experts so that the order of weights doesn't change
+        if self.norm_topk_prob:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # print(f"routing_weights: {routing_weights}")
 
         if self.scores is None:
             self.nsamples += batch_size

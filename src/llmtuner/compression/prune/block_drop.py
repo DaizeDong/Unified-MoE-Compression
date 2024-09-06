@@ -15,8 +15,9 @@ from tqdm import tqdm
 from llmtuner.compression.prune.io import create_dir
 from llmtuner.compression.prune.utils import prepare_calibration_input, print_gpu_memory
 from llmtuner.compression.prune.wrapper import HiddenStatesRecordWrapper
-from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel, DeepseekForCausalLM
+from llmtuner.model.deepseek.modeling_deepseek import DeepseekForCausalLM, DeepseekPreTrainedModel
 from llmtuner.model.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel
+from llmtuner.model.qwen.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoePreTrainedModel
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ def get_block_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
         if isinstance(unwrapped_model, MixtralPreTrainedModel):
             num_layers = unwrapped_model.config.num_hidden_layers
         elif isinstance(unwrapped_model, DeepseekPreTrainedModel):
+            num_layers = unwrapped_model.config.num_hidden_layers
+        elif isinstance(unwrapped_model, Qwen2MoePreTrainedModel):
             num_layers = unwrapped_model.config.num_hidden_layers
         else:
             raise NotImplementedError
@@ -205,6 +208,13 @@ def post_block_drop(compressed_model_save_path, model, tokenizer, layer_id_mappi
             if isinstance(new_config.n_routed_experts, list):  # for compatibility with Expert Drop & Layer Drop
                 new_config.n_routed_experts = [model.config.n_routed_experts[i] for i in preserved_layers]
             new_model = DeepseekForCausalLM(config=new_config)
+
+        elif isinstance(model, Qwen2MoePreTrainedModel):
+            if hasattr(new_config, "layer_experts_idx"):  # for compatibility with Expert Drop
+                new_config.layer_experts_idx = [model.config.layer_experts_idx[i] for i in preserved_layers]
+            if isinstance(new_config.num_experts, list):  # for compatibility with Expert Drop & Layer Drop
+                new_config.num_experts = [model.config.num_experts[i] for i in preserved_layers]
+            new_model = Qwen2MoeForCausalLM(config=new_config)
 
         else:
             raise NotImplementedError

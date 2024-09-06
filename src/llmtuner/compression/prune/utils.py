@@ -3,7 +3,7 @@ from torch import nn as nn, cuda
 
 from llmtuner.model.deepseek.modeling_deepseek import DeepseekPreTrainedModel
 from llmtuner.model.mixtral.modeling_mixtral import MixtralPreTrainedModel
-
+from llmtuner.model.qwen.modeling_qwen2_moe import Qwen2MoePreTrainedModel
 
 def print_gpu_memory(accelerator):
     if accelerator.is_local_main_process:
@@ -135,6 +135,10 @@ def get_moe_model_information(model, accelerator=None):
         num_experts = model.config.n_routed_experts
         num_layers = model.config.num_hidden_layers
         moe_layer_indices = [layer_idx for layer_idx in range(num_layers) if (model.config.n_routed_experts is not None and layer_idx >= model.config.first_k_dense_replace and layer_idx % model.config.moe_layer_freq == 0)]
+    elif isinstance(model, Qwen2MoePreTrainedModel):
+        num_experts = model.config.num_experts
+        num_layers = model.config.num_hidden_layers
+        moe_layer_indices = list(range(num_layers))
     else:
         raise NotImplementedError
 
