@@ -7,4 +7,5 @@ model_type="normal" # normal quantized_awq quantized_gptq
 python src/measure_speed.py \
   --model_path $model_path \
   --model_type ${model_type} \
-  --save_file ${save_file}
+  --save_file ${save_file} \
+  --generator "hf"
