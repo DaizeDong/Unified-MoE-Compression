@@ -128,16 +128,9 @@ class MixtralExpertDropWrapper:
         else:
             batch_size = input.shape[0]
 
-        # Get selection mask
-        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
-        topk_logits, topk_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        mask = torch.zeros_like(router_logits, device=router_logits.device).scatter_(dim=-1, index=topk_indices, value=1)
-
         # Record scores
+        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights = routing_weights * mask  # using mask to filter selected experts so that the order of weights doesn't change
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # print(f"routing_weights: {routing_weights}")
 
         if self.scores is None:
             self.nsamples += batch_size
@@ -184,7 +177,6 @@ class QwenExpertDropWrapper:
         self.nsamples = 0
         self.num_experts = layer.num_experts
         self.top_k = layer.top_k
-        self.norm_topk_prob = layer.norm_topk_prob
 
     def add_batch(self, input, router_logits):
         if len(input.shape) == 2:
@@ -192,17 +184,9 @@ class QwenExpertDropWrapper:
         else:
             batch_size = input.shape[0]
 
-        # Get selection mask
-        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
-        topk_logits, topk_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        mask = torch.zeros_like(router_logits, device=router_logits.device).scatter_(dim=-1, index=topk_indices, value=1)
-
         # Record scores
+        router_logits = router_logits.reshape(-1, router_logits.shape[-1])  # router_logits: shape(batch_size * seq_len, n_experts)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights = routing_weights * mask  # using mask to filter selected experts so that the order of weights doesn't change
-        if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # print(f"routing_weights: {routing_weights}")
 
         if self.scores is None:
             self.nsamples += batch_size
