@@ -193,7 +193,7 @@ def layerwise_pruning(args: Namespace, model, dataloader: DataLoader, accelerato
         else:
             if accelerator.is_main_process:
                 routing_scores = torch.stack(routing_scores, dim=0)
-                create_dir(os.path.dirname(args.score_save_file))
+                create_dir(os.path.dirname(args.score_save_file), suppress_errors=True)
                 torch.save(routing_scores, args.score_save_file)
             accelerator.wait_for_everyone()
 
@@ -402,7 +402,7 @@ def global_pruning(args: Namespace, model, dataloader: DataLoader, accelerator: 
         else:
             if accelerator.is_main_process:
                 routing_scores = torch.stack(routing_scores, dim=0)
-                create_dir(os.path.dirname(args.score_save_file))
+                create_dir(os.path.dirname(args.score_save_file), suppress_errors=True)
                 torch.save(routing_scores, args.score_save_file)
             accelerator.wait_for_everyone()
 

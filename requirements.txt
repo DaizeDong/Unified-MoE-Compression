@@ -9,6 +9,7 @@ deepspeed==0.13.3
 sentencepiece==0.2.0
 trl==0.7.11
 peft==0.8.2
+matplotlib==3.9.2
 numpy<2.0.0
 ninja
 fastchat

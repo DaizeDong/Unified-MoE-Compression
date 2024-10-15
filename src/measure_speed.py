@@ -271,7 +271,7 @@ def main(args):
 
     df = pd.DataFrame(all_stats)
     if args.save_file is not None:
-        create_dir(os.path.dirname(args.save_file))
+        create_dir(os.path.dirname(args.save_file), suppress_errors=True)
         df.to_csv(args.save_file, index=False)
         print(f"Results saved to \"{args.save_file}\"!")
     print('GPU:', torch.cuda.get_device_name())

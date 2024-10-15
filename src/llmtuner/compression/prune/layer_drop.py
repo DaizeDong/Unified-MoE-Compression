@@ -119,7 +119,7 @@ def get_layer_similarities(model: MixtralForCausalLM, dataloader: DataLoader, ac
         # Save to the cache file
         if cache_file is not None:
             if accelerator.is_main_process:
-                create_dir(os.path.dirname(cache_file))
+                create_dir(os.path.dirname(cache_file), suppress_errors=True)
                 torch.save(similarities.clone().cpu(), cache_file)
                 print(f"Saving cached similarities to {cache_file}")
             accelerator.wait_for_everyone()

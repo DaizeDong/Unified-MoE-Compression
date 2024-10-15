@@ -21,7 +21,7 @@ output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 output_dir="${output_dir}/DeepSeek-${dataset}-lr${lr}-epoch${epochs}"
 use_fast_tokenizer="True"
 
-srun accelerate launch \
+accelerate launch \
   --config_file "config/accelerate/deepseek_deepspeed_zero2.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \

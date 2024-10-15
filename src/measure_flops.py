@@ -44,7 +44,7 @@ def main(args):
     print(flop_counter.get_total_flops())
 
     if args.save_file is not None:
-        create_dir(os.path.dirname(args.save_file))
+        create_dir(os.path.dirname(args.save_file), suppress_errors=True)
         with open(args.save_file, "w") as f:
             f.write(str(flop_counter.get_total_flops()) + "\n")
             f.write(str(flop_counter.get_table()))

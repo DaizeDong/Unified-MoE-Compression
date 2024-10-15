@@ -22,7 +22,7 @@ output_dir="########PATH_TO_SAVE_THE_RESULTS########"
 output_dir="${output_dir}/Mixtral-${dataset}-lr${lr}-epoch${epochs}"
 use_fast_tokenizer="False"
 
-srun accelerate launch \
+accelerate launch \
   --config_file "config/accelerate/mixtral_deepspeed_zero3.yaml" \
   --num_processes ${num_processes} \
   --num_machines ${num_nodes} \

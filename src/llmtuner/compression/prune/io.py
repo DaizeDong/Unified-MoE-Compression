@@ -109,9 +109,15 @@ def save_block_dropped_config(compressed_model_save_path, model, tokenizer, acce
     accelerator.wait_for_everyone()
 
 
-def create_dir(dir):
-    if not os.path.exists(dir):
-        os.makedirs(dir)
+def create_dir(dir, suppress_errors=False):
+    try:
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+    except Exception as e:
+        if suppress_errors:
+            print(f"{e}\n(This exception have been suppressed and would not influence the program execution)")
+        else:
+            raise e
 
 
 def load_json(file_path):
@@ -121,6 +127,6 @@ def load_json(file_path):
 
 
 def save_json(data, file_path, indent=4, **kwargs):
-    create_dir(os.path.dirname(file_path))
+    create_dir(os.path.dirname(file_path), suppress_errors=True)
     with open(file_path, "w", encoding="utf8") as f:
         f.write(f"{json.dumps(data, ensure_ascii=False, indent=indent, **kwargs)}\n")
