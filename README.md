@@ -27,7 +27,7 @@ Create conda environment and install the pipeline for pruning and Expert Trimmin
 conda create -n moe-compression python=3.10
 conda activate moe-compression
 
-git clone git@github.com:DaizeDong/Unified-MoE-Compression.git
+git clone git@github.com:CASE-Lab-UMD/Unified-MoE-Compression.git
 cd ./Unified-MoE-Compression
 pip install -e .
 pip install flash-attn --no-build-isolation
