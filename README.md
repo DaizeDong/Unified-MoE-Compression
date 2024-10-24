@@ -119,6 +119,7 @@ bash scripts/finetuning/mixtral_finetune.sh
 bash scripts/finetuning/deepseek_finetune.sh
 ```
 
+Note that the scripts are configurated for finetuning on 8 NVIDIA-A100-80G GPUs. You may need to adjust the `batch_size` according to your resources.
 
 
 ## Running Evaluation
